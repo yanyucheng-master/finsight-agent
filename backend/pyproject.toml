@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "finsight-agent"
+version = "0.1.0"
+description = "FinSight Agent —— 可验证的上市公司财务风险研究智能体"
+readme = "../README.md"
+requires-python = ">=3.10"
+license = { text = "Proprietary (competition prototype)" }
+dependencies = [
+  "fastapi>=0.110",
+  "uvicorn>=0.27",
+  "pydantic>=2.6",
+  "httpx>=0.27",
+  "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+pdf = ["pymupdf>=1.24"]
+dev = ["pytest>=8", "ruff>=0.5"]
+
+[project.scripts]
+finsight = "finsight.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["finsight*"]
+
+[tool.setuptools.package-data]
+finsight = ["web/**/*", "knowledge/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+markers = [
+  "snapshots: tests that require real data snapshots under data/snapshots",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["E501", "B008"]
+
+[tool.ruff.lint.per-file-ignores]
+# 采集器需在裸 Python 3.8+ 上运行，保留 typing.Optional 等写法
+"finsight/data/collector.py" = ["UP"]

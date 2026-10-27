@@ -1,0 +1,78 @@
+{
+   "pages" : 1,
+   "data" : [
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2025-12-31 00:00:00",
+         "REPORT_TYPE" : "\u5E74\u62A5",
+         "REPORT_DATE_NAME" : "2025\u5E74\u62A5"
+      },
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2024-12-31 00:00:00",
+         "REPORT_TYPE" : "\u5E74\u62A5",
+         "REPORT_DATE_NAME" : "2024\u5E74\u62A5"
+      },
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2023-12-31 00:00:00",
+         "REPORT_TYPE" : "\u5E74\u62A5",
+         "REPORT_DATE_NAME" : "2023\u5E74\u62A5"
+      },
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2022-12-31 00:00:00",
+         "REPORT_TYPE" : "\u5E74\u62A5",
+         "REPORT_DATE_NAME" : "2022\u5E74\u62A5"
+      },
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2021-12-31 00:00:00",
+         "REPORT_TYPE" : "\u5E74\u62A5",
+         "REPORT_DATE_NAME" : "2021\u5E74\u62A5"
+      },
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2020-12-31 00:00:00",
+         "REPORT_TYPE" : "\u5E74\u62A5",
+         "REPORT_DATE_NAME" : "2020\u5E74\u62A5"
+      },
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2019-12-31 00:00:00",
+         "REPORT_TYPE" : "\u5E74\u62A5",
+         "REPORT_DATE_NAME" : "2019\u5E74\u62A5"
+      },
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2018-12-31 00:00:00",
+         "REPORT_TYPE" : "\u5E74\u62A5",
+         "REPORT_DATE_NAME" : "2018\u5E74\u62A5"
+      },
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2017-12-31 00:00:00",
+         "REPORT_TYPE" : "\u5E74\u62A5",
+         "REPORT_DATE_NAME" : "2017\u5E74\u62A5"
+      },
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2016-12-31 00:00:00",
+         "REPORT_TYPE" : "\u5E74\u62A5",
+         "REPORT_DATE_NAME" : "2016\u5E74\u62A5"
+      },
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2015-12-31 00:00:00",
+         "REPORT_TYPE" : "\u5E74\u62A5",
+         "REPORT_DATE_NAME" : "2015\u5E74\u62A5"
+      },
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2014-12-31 00:00:00",
+         "REPORT_TYPE" : "\u5E74\u62A5",
+         "REPORT_DATE_NAME" : "2014\u5E74\u62A5"
+      }
+   ],
+   "count" : 12
+}

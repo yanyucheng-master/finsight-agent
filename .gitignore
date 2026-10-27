@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.env
+node_modules/
+frontend/dist/
+# 原始快照中的 PDF 体积大，不进 git（manifest 中保留哈希记录）
+data/snapshots/objects/**/*.pdf
+data/*.db

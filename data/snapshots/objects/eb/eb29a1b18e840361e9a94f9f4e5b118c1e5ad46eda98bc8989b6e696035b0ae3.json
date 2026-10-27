@@ -1,0 +1,258 @@
+{
+   "pages" : 1,
+   "data" : [
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2026-09-30 00:00:00",
+         "REPORT_TYPE" : "\u4E09\u5B63\u62A5",
+         "REPORT_DATE_NAME" : "2026\u4E09\u5B63\u62A5"
+      },
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2026-06-30 00:00:00",
+         "REPORT_TYPE" : "\u4E2D\u62A5",
+         "REPORT_DATE_NAME" : "2026\u4E2D\u62A5"
+      },
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2026-03-31 00:00:00",
+         "REPORT_TYPE" : "\u4E00\u5B63\u62A5",
+         "REPORT_DATE_NAME" : "2026\u4E00\u5B63\u62A5"
+      },
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2025-12-31 00:00:00",
+         "REPORT_TYPE" : "\u5E74\u62A5",
+         "REPORT_DATE_NAME" : "2025\u5E74\u62A5"
+      },
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2025-09-30 00:00:00",
+         "REPORT_TYPE" : "\u4E09\u5B63\u62A5",
+         "REPORT_DATE_NAME" : "2025\u4E09\u5B63\u62A5"
+      },
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2025-06-30 00:00:00",
+         "REPORT_TYPE" : "\u4E2D\u62A5",
+         "REPORT_DATE_NAME" : "2025\u4E2D\u62A5"
+      },
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2025-03-31 00:00:00",
+         "REPORT_TYPE" : "\u4E00\u5B63\u62A5",
+         "REPORT_DATE_NAME" : "2025\u4E00\u5B63\u62A5"
+      },
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2024-12-31 00:00:00",
+         "REPORT_TYPE" : "\u5E74\u62A5",
+         "REPORT_DATE_NAME" : "2024\u5E74\u62A5"
+      },
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2024-09-30 00:00:00",
+         "REPORT_TYPE" : "\u4E09\u5B63\u62A5",
+         "REPORT_DATE_NAME" : "2024\u4E09\u5B63\u62A5"
+      },
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2024-06-30 00:00:00",
+         "REPORT_TYPE" : "\u4E2D\u62A5",
+         "REPORT_DATE_NAME" : "2024\u4E2D\u62A5"
+      },
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2024-03-31 00:00:00",
+         "REPORT_TYPE" : "\u4E00\u5B63\u62A5",
+         "REPORT_DATE_NAME" : "2024\u4E00\u5B63\u62A5"
+      },
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2023-12-31 00:00:00",
+         "REPORT_TYPE" : "\u5E74\u62A5",
+         "REPORT_DATE_NAME" : "2023\u5E74\u62A5"
+      },
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2023-09-30 00:00:00",
+         "REPORT_TYPE" : "\u4E09\u5B63\u62A5",
+         "REPORT_DATE_NAME" : "2023\u4E09\u5B63\u62A5"
+      },
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2023-06-30 00:00:00",
+         "REPORT_TYPE" : "\u4E2D\u62A5",
+         "REPORT_DATE_NAME" : "2023\u4E2D\u62A5"
+      },
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2023-03-31 00:00:00",
+         "REPORT_TYPE" : "\u4E00\u5B63\u62A5",
+         "REPORT_DATE_NAME" : "2023\u4E00\u5B63\u62A5"
+      },
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2022-12-31 00:00:00",
+         "REPORT_TYPE" : "\u5E74\u62A5",
+         "REPORT_DATE_NAME" : "2022\u5E74\u62A5"
+      },
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2022-09-30 00:00:00",
+         "REPORT_TYPE" : "\u4E09\u5B63\u62A5",
+         "REPORT_DATE_NAME" : "2022\u4E09\u5B63\u62A5"
+      },
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2022-06-30 00:00:00",
+         "REPORT_TYPE" : "\u4E2D\u62A5",
+         "REPORT_DATE_NAME" : "2022\u4E2D\u62A5"
+      },
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2022-03-31 00:00:00",
+         "REPORT_TYPE" : "\u4E00\u5B63\u62A5",
+         "REPORT_DATE_NAME" : "2022\u4E00\u5B63\u62A5"
+      },
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2021-12-31 00:00:00",
+         "REPORT_TYPE" : "\u5E74\u62A5",
+         "REPORT_DATE_NAME" : "2021\u5E74\u62A5"
+      },
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2021-09-30 00:00:00",
+         "REPORT_TYPE" : "\u4E09\u5B63\u62A5",
+         "REPORT_DATE_NAME" : "2021\u4E09\u5B63\u62A5"
+      },
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2021-06-30 00:00:00",
+         "REPORT_TYPE" : "\u4E2D\u62A5",
+         "REPORT_DATE_NAME" : "2021\u4E2D\u62A5"
+      },
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2021-03-31 00:00:00",
+         "REPORT_TYPE" : "\u4E00\u5B63\u62A5",
+         "REPORT_DATE_NAME" : "2021\u4E00\u5B63\u62A5"
+      },
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2020-12-31 00:00:00",
+         "REPORT_TYPE" : "\u5E74\u62A5",
+         "REPORT_DATE_NAME" : "2020\u5E74\u62A5"
+      },
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2020-09-30 00:00:00",
+         "REPORT_TYPE" : "\u4E09\u5B63\u62A5",
+         "REPORT_DATE_NAME" : "2020\u4E09\u5B63\u62A5"
+      },
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2020-06-30 00:00:00",
+         "REPORT_TYPE" : "\u4E2D\u62A5",
+         "REPORT_DATE_NAME" : "2020\u4E2D\u62A5"
+      },
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2020-03-31 00:00:00",
+         "REPORT_TYPE" : "\u4E00\u5B63\u62A5",
+         "REPORT_DATE_NAME" : "2020\u4E00\u5B63\u62A5"
+      },
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2019-12-31 00:00:00",
+         "REPORT_TYPE" : "\u5E74\u62A5",
+         "REPORT_DATE_NAME" : "2019\u5E74\u62A5"
+      },
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2019-09-30 00:00:00",
+         "REPORT_TYPE" : "\u4E09\u5B63\u62A5",
+         "REPORT_DATE_NAME" : "2019\u4E09\u5B63\u62A5"
+      },
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2019-06-30 00:00:00",
+         "REPORT_TYPE" : "\u4E2D\u62A5",
+         "REPORT_DATE_NAME" : "2019\u4E2D\u62A5"
+      },
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2019-03-31 00:00:00",
+         "REPORT_TYPE" : "\u4E00\u5B63\u62A5",
+         "REPORT_DATE_NAME" : "2019\u4E00\u5B63\u62A5"
+      },
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2018-12-31 00:00:00",
+         "REPORT_TYPE" : "\u5E74\u62A5",
+         "REPORT_DATE_NAME" : "2018\u5E74\u62A5"
+      },
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2018-09-30 00:00:00",
+         "REPORT_TYPE" : "\u4E09\u5B63\u62A5",
+         "REPORT_DATE_NAME" : "2018\u4E09\u5B63\u62A5"
+      },
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2018-06-30 00:00:00",
+         "REPORT_TYPE" : "\u4E2D\u62A5",
+         "REPORT_DATE_NAME" : "2018\u4E2D\u62A5"
+      },
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2018-03-31 00:00:00",
+         "REPORT_TYPE" : "\u4E00\u5B63\u62A5",
+         "REPORT_DATE_NAME" : "2018\u4E00\u5B63\u62A5"
+      },
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2017-12-31 00:00:00",
+         "REPORT_TYPE" : "\u5E74\u62A5",
+         "REPORT_DATE_NAME" : "2017\u5E74\u62A5"
+      },
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2017-09-30 00:00:00",
+         "REPORT_TYPE" : "\u4E09\u5B63\u62A5",
+         "REPORT_DATE_NAME" : "2017\u4E09\u5B63\u62A5"
+      },
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2017-06-30 00:00:00",
+         "REPORT_TYPE" : "\u4E2D\u62A5",
+         "REPORT_DATE_NAME" : "2017\u4E2D\u62A5"
+      },
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2017-03-31 00:00:00",
+         "REPORT_TYPE" : "\u4E00\u5B63\u62A5",
+         "REPORT_DATE_NAME" : "2017\u4E00\u5B63\u62A5"
+      },
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2016-12-31 00:00:00",
+         "REPORT_TYPE" : "\u5E74\u62A5",
+         "REPORT_DATE_NAME" : "2016\u5E74\u62A5"
+      },
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2015-12-31 00:00:00",
+         "REPORT_TYPE" : "\u5E74\u62A5",
+         "REPORT_DATE_NAME" : "2015\u5E74\u62A5"
+      },
+      {
+         "SECURITY_CODE" : "300750",
+         "REPORT_DATE" : "2014-12-31 00:00:00",
+         "REPORT_TYPE" : "\u5E74\u62A5",
+         "REPORT_DATE_NAME" : "2014\u5E74\u62A5"
+      }
+   ],
+   "count" : 42
+}
