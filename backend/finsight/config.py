@@ -16,8 +16,22 @@ except ImportError:  # pragma: no cover
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-if load_dotenv is not None:
-    load_dotenv(PROJECT_ROOT / ".env", override=False)
+def _load_env_file(path: Path) -> None:
+    """读取项目根目录 .env。优先用 python-dotenv；未安装时用内置的简易解析（KEY=VALUE，忽略注释）。"""
+    if not path.exists():
+        return
+    if load_dotenv is not None:
+        load_dotenv(path, override=False)
+        return
+    for line in path.read_text(encoding="utf-8-sig").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+
+
+_load_env_file(PROJECT_ROOT / ".env")
 
 
 def _env(name: str, default: str = "") -> str:
