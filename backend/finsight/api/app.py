@@ -8,14 +8,21 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
 
 from finsight import __version__
+from finsight.agent.research_agent import AgentAnswer, ResearchAgent
 from finsight.analytics.diagnosis import DiagnosisResult, diagnose
 from finsight.analytics.engine import metric_catalog
 from finsight.config import LLM_PROVIDERS, Settings, llm_settings, load_settings
 from finsight.data.service import CompanyNotFound, DataService, load_service
 from finsight.llm.gateway import LLMClient, LLMError, make_client
 from finsight.reporting.report import Report, generate_report
+
+
+class AskRequest(BaseModel):
+    question: str
+    provider: str | None = None
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 
@@ -117,6 +124,23 @@ def create_app(settings: Settings | None = None, service: DataService | None = N
         result = get_diag(code)
         llm = get_llm(provider) if mode != "template" else None
         return generate_report(result, llm=llm, mode=mode)
+
+    @app.post("/api/companies/{code}/ask", response_model=AgentAnswer)
+    def ask(code: str, body: AskRequest) -> AgentAnswer:
+        if not body.question.strip() or len(body.question) > 500:
+            raise HTTPException(400, "问题不能为空且不超过 500 字")
+        llm = get_llm(body.provider)
+        if llm is None:
+            raise HTTPException(503, "未配置大模型 API Key，问答功能不可用（体检与模板报告不受影响）")
+
+        def peers(c: str):
+            try:
+                return get_diag(c)
+            except HTTPException:
+                return None
+
+        agent = ResearchAgent(get_diag(code), llm, max_steps=settings.agent_max_steps, peer_loader=peers)
+        return agent.ask(body.question.strip())
 
     @app.get("/api/metrics/catalog")
     def catalog() -> list[dict]:

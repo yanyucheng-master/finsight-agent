@@ -118,6 +118,38 @@ def cmd_llm_check(args: argparse.Namespace) -> int:
     return 0 if "error" not in report else 1
 
 
+def cmd_ask(args: argparse.Namespace) -> int:
+    from finsight.agent.research_agent import ResearchAgent
+    from finsight.analytics.diagnosis import diagnose
+    from finsight.config import llm_settings
+    from finsight.data.service import CompanyNotFound
+    from finsight.llm.gateway import make_client
+
+    svc = _service()
+    cfg = llm_settings(args.provider) if args.provider else load_settings().llm
+    if not cfg.enabled:
+        print(f"未配置 {cfg.provider} 的 API Key")
+        return 1
+
+    def peers(code: str):
+        try:
+            return diagnose(svc.company(code))
+        except CompanyNotFound:
+            return None
+
+    agent = ResearchAgent(diagnose(svc.company(args.code)), make_client(cfg), peer_loader=peers)
+    ans = agent.ask(args.question)
+    for st in ans.steps:
+        print(f"  · 调用 {st.tool}({st.arguments}) → {st.summary}")
+    print("\n" + ans.annotated_answer)
+    v = ans.verification
+    print(f"\n—— 数字 {v.total} 个，核验通过 {v.verified}，无证据 {v.unverified}，不一致 {v.mismatch}；用量 {ans.usage}")
+    if args.out:
+        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.out).write_text(ans.model_dump_json(indent=1), encoding="utf-8")
+    return 0
+
+
 def cmd_verify(args: argparse.Namespace) -> int:
     from finsight.data.snapshots import SnapshotIntegrityError, SnapshotStore
 
@@ -171,6 +203,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--provider", choices=["deepseek", "kimi", "intern"], default=None)
     p.add_argument("--out", default="")
     p.set_defaults(func=cmd_report)
+    p = sub.add_parser("ask", help="向研究智能体提问")
+    p.add_argument("code")
+    p.add_argument("question")
+    p.add_argument("--provider", choices=["deepseek", "kimi", "intern"], default=None)
+    p.add_argument("--out", default="")
+    p.set_defaults(func=cmd_ask)
     p = sub.add_parser("llm-check", help="检查大模型 API 连通性")
     p.add_argument("--provider", choices=["deepseek", "kimi", "intern"], default="deepseek")
     p.set_defaults(func=cmd_llm_check)
