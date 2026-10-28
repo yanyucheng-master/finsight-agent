@@ -51,6 +51,73 @@ def cmd_diagnose(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_report(args: argparse.Namespace) -> int:
+    from finsight.analytics.diagnosis import diagnose
+    from finsight.config import llm_settings
+    from finsight.llm.gateway import LLMError, make_client
+    from finsight.reporting.report import generate_report
+
+    svc = _service()
+    llm = None
+    if args.mode != "template":
+        cfg = llm_settings(args.provider) if args.provider else load_settings().llm
+        if cfg.enabled:
+            try:
+                llm = make_client(cfg)
+            except LLMError as exc:
+                print("大模型不可用：", exc)
+        else:
+            print(f"未配置 {cfg.provider} 的 API Key，将使用模板报告")
+    rep = generate_report(diagnose(svc.company(args.code)), llm=llm, mode=args.mode)
+    v = rep.verification
+    print(rep.annotated_markdown)
+    print(f"\n—— 模式：{rep.mode}  模型：{rep.model or '—'}  尝试次数：{rep.attempts}  用量：{rep.usage or '—'}")
+    print(f"—— 数字断言 {v.total} 个：核验通过 {v.verified}，未标引用但一致 {v.unattributed}，"
+          f"不一致 {v.mismatch}，引用无效 {v.invalid_ref}，无证据 {v.unverified}；可核验率 {v.verifiable_rate:.1%}")
+    for w in rep.warnings + v.compliance_flags:
+        print("—— 警告：", w)
+    if args.out:
+        out = Path(args.out)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(rep.model_dump_json(indent=1), encoding="utf-8")
+        print(f"已保存 {out}")
+    return 0
+
+
+def cmd_llm_check(args: argparse.Namespace) -> int:
+    """连通性自检：列出可用模型，并做一次极短的对话。结果写入 data/runs/ 便于排查。"""
+    import json
+    import time
+
+    from finsight.config import llm_settings
+    from finsight.llm.gateway import LLMError, make_client
+
+    cfg = llm_settings(args.provider)
+    report: dict = {"provider": cfg.provider, "base_url": cfg.base_url, "model": cfg.model, "key_configured": cfg.enabled}
+    if not cfg.enabled:
+        print(f"[{cfg.provider}] 未配置 API Key")
+        report["error"] = "no key"
+    else:
+        try:
+            client = make_client(cfg)
+            try:
+                report["models"] = client.list_models()[:50]
+            except Exception as exc:  # 部分平台不开放 /models
+                report["models_error"] = str(exc)[:200]
+            t0 = time.monotonic()
+            resp = client.chat([{"role": "user", "content": "只回复两个字：正常"}], max_tokens=20)
+            report.update({"reply": resp.content, "usage": resp.usage, "latency_ms": int((time.monotonic() - t0) * 1000),
+                           "served_model": resp.model})
+            print(f"[{cfg.provider}] 连通正常：模型 {resp.model}，回复「{resp.content.strip()}」，耗时 {report['latency_ms']} ms")
+        except LLMError as exc:
+            report["error"] = str(exc)
+            print(f"[{cfg.provider}] 失败：{exc}")
+    out = load_settings().data_dir / "runs" / f"llm_check_{cfg.provider}.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(report, ensure_ascii=False, indent=1), encoding="utf-8")
+    return 0 if "error" not in report else 1
+
+
 def cmd_verify(args: argparse.Namespace) -> int:
     from finsight.data.snapshots import SnapshotIntegrityError, SnapshotStore
 
@@ -98,6 +165,15 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--years", type=int, default=6)
     p.add_argument("--json", default="")
     p.set_defaults(func=cmd_diagnose)
+    p = sub.add_parser("report", help="生成可验证研究简报（大模型 / 模板）")
+    p.add_argument("code")
+    p.add_argument("--mode", choices=["auto", "llm", "template"], default="auto")
+    p.add_argument("--provider", choices=["deepseek", "kimi", "intern"], default=None)
+    p.add_argument("--out", default="")
+    p.set_defaults(func=cmd_report)
+    p = sub.add_parser("llm-check", help="检查大模型 API 连通性")
+    p.add_argument("--provider", choices=["deepseek", "kimi", "intern"], default="deepseek")
+    p.set_defaults(func=cmd_llm_check)
     p = sub.add_parser("verify-snapshots", help="校验快照完整性")
     p.set_defaults(func=cmd_verify)
     p = sub.add_parser("serve", help="启动 API 服务")

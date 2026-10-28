@@ -12,13 +12,16 @@ from fastapi.responses import FileResponse
 from finsight import __version__
 from finsight.analytics.diagnosis import DiagnosisResult, diagnose
 from finsight.analytics.engine import metric_catalog
-from finsight.config import Settings, load_settings
+from finsight.config import LLM_PROVIDERS, Settings, llm_settings, load_settings
 from finsight.data.service import CompanyNotFound, DataService, load_service
+from finsight.llm.gateway import LLMClient, LLMError, make_client
+from finsight.reporting.report import Report, generate_report
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 
 
-def create_app(settings: Settings | None = None, service: DataService | None = None) -> FastAPI:
+def create_app(settings: Settings | None = None, service: DataService | None = None,
+               llm_factory=None) -> FastAPI:
     settings = settings or load_settings()
     svc = service or load_service(settings.snapshot_dir)
     app = FastAPI(title="FinSight Agent API", version=__version__)
@@ -84,6 +87,36 @@ def create_app(settings: Settings | None = None, service: DataService | None = N
                 if rec:
                     snapshots[rec.id] = rec.public()
         return {"evidence": ev, "chain": chain, "snapshots": snapshots}
+
+    clients: dict[str, LLMClient] = {}
+
+    def get_llm(provider: str | None) -> LLMClient | None:
+        name = (provider or settings.llm.provider).lower()
+        if name in clients:
+            return clients[name]
+        if llm_factory is not None:
+            clients[name] = llm_factory(name)
+            return clients[name]
+        cfg = settings.llm if provider is None else llm_settings(name)
+        if not cfg.enabled:
+            return None
+        try:
+            clients[name] = make_client(cfg)
+        except LLMError:
+            return None
+        return clients[name]
+
+    @app.get("/api/llm")
+    def llm_status() -> dict:
+        return {"default": settings.llm.public(),
+                "providers": {name: llm_settings(name).public() for name in LLM_PROVIDERS}}
+
+    @app.post("/api/companies/{code}/report", response_model=Report)
+    def report(code: str, mode: str = Query("auto", pattern="^(auto|llm|template)$"),
+               provider: str | None = Query(None, pattern="^(deepseek|kimi|intern)$")) -> Report:
+        result = get_diag(code)
+        llm = get_llm(provider) if mode != "template" else None
+        return generate_report(result, llm=llm, mode=mode)
 
     @app.get("/api/metrics/catalog")
     def catalog() -> list[dict]:

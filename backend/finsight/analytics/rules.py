@@ -46,6 +46,47 @@ RULE_PARAMS = {
 }
 
 
+# 阈值的单位与说明（用于把阈值登记为可引用的 param 证据）
+PARAM_META: dict[str, tuple[str, str]] = {
+    "ocf_to_np_low": ("times", "净现比低位阈值"), "ocf_to_np_warn": ("times", "净现比关注阈值"),
+    "accruals_medium": ("ratio", "应计比率中风险阈值"), "accruals_high": ("ratio", "应计比率高风险阈值"),
+    "rec_gap_medium": ("ratio", "应收-营收增速差中风险阈值"), "rec_gap_high": ("ratio", "应收-营收增速差高风险阈值"),
+    "nonrec_medium": ("ratio", "非经常性损益占比中风险阈值"), "nonrec_high": ("ratio", "非经常性损益占比高风险阈值"),
+    "cash_rev_low": ("times", "收现比低位阈值"), "debt_ratio_medium": ("ratio", "资产负债率中风险阈值"),
+    "debt_ratio_high": ("ratio", "资产负债率高风险阈值"), "icr_high": ("times", "利息保障倍数高风险阈值"),
+    "icr_medium": ("times", "利息保障倍数中风险阈值"), "cash_assets_double": ("ratio", "存贷双高：货币资金占比阈值"),
+    "ibd_assets_double": ("ratio", "存贷双高：有息负债率阈值"), "cash_yield_low": ("ratio", "货币资金隐含收益率低位阈值"),
+    "goodwill_medium": ("ratio", "商誉占比中风险阈值"), "goodwill_high": ("ratio", "商誉占比高风险阈值"),
+    "other_rec_medium": ("ratio", "其他应收款占比中风险阈值"), "other_rec_high": ("ratio", "其他应收款占比高风险阈值"),
+    "prepay_medium": ("ratio", "预付款项占比阈值"), "inv_gap_medium": ("ratio", "存货-成本增速差阈值"),
+    "gm_drop": ("ratio", "毛利率下滑阈值"), "rev_drop": ("ratio", "营收下滑阈值"), "np_drop": ("ratio", "利润下滑阈值"),
+    "rec_material_days": ("days", "应收重要性门槛（周转天数）"),
+}
+LITERATURE_PARAMS: dict[str, tuple[float, str, str, str]] = {
+    "beneish_threshold": (BENEISH_THRESHOLD, "score", "Beneish M-Score 判别阈值", "Beneish (1999)"),
+    "beneish_watch": (BENEISH_WATCH, "score", "Beneish M-Score 保守警戒阈值", "Beneish et al. (2013) 常用阈值"),
+    "altman_z2_safe": (ALTMAN_Z2_SAFE, "score", "Altman Z'' 安全区下限", "Altman, Hartzell & Peck (1995)"),
+    "altman_z2_distress": (ALTMAN_Z2_DISTRESS, "score", "Altman Z'' 困境区上限", "Altman, Hartzell & Peck (1995)"),
+    "piotroski_max": (9.0, "count", "Piotroski F-Score 满分", "Piotroski (2000)"),
+}
+
+
+def register_params(ledger) -> None:
+    for name, value in RULE_PARAMS.items():
+        unit, label = PARAM_META.get(name, ("ratio", name))
+        ledger.add(Evidence(id=f"p:{name}", kind="param", label=label, value=value, unit=unit,  # type: ignore[arg-type]
+                            note="经验阈值（可在 RULE_PARAMS 中调整）"))
+    for name, (value, unit, label, ref) in LITERATURE_PARAMS.items():
+        ledger.add(Evidence(id=f"p:{name}", kind="param", label=label, value=value, unit=unit,  # type: ignore[arg-type]
+                            note=f"文献阈值：{ref}"))
+
+
+def tp(r: RuleCtx, name: str) -> str:
+    """阈值的展示文本 + 引用。"""
+    ev = r.engine.ledger.get(f"p:{name}")
+    return f"{fmt_value(ev.value, ev.unit)}[[p:{name}]]" if ev else name
+
+
 class Signal(BaseModel):
     rule: str
     title: str
@@ -115,12 +156,12 @@ def eq01_cash_conversion(r: RuleCtx) -> list[Signal]:
     text = "、".join(f"{yr(e)} {cite(e)}" for e in s)
     if len(low) >= 2:
         return [Signal(rule="EQ01", title="利润的现金含量持续偏低", dimension="earnings_quality", severity="high",
-                       period=s[0].period, summary=f"近年净现比：{text}，其中 {len(low)} 年低于 {P['ocf_to_np_low']}。",
+                       period=s[0].period, summary=f"近年净现比：{text}，其中 {len(low)} 年低于 {tp(r, 'ocf_to_np_low')}。",
                        evidence=[e.id for e in s], rationale="净利润长期没有转化为经营现金流，是盈余质量差和收入确认激进的常见特征（经验阈值）。")]
     avg = sum(float(e.value) for e in s) / len(s)  # type: ignore[arg-type]
     if float(s[0].value) < P["ocf_to_np_warn"] and avg < P["ocf_to_np_warn"]:  # type: ignore[arg-type]
         return [Signal(rule="EQ01", title="利润的现金含量偏低", dimension="earnings_quality", severity="medium",
-                       period=s[0].period, summary=f"近年净现比：{text}，均值低于 {P['ocf_to_np_warn']}。",
+                       period=s[0].period, summary=f"近年净现比：{text}，均值低于 {tp(r, 'ocf_to_np_warn')}。",
                        evidence=[e.id for e in s], rationale="经验阈值：净现比持续低于 0.8 需关注应收、存货对现金的占用。")]
     if avg >= 1.0 and all(float(e.value) >= 0.9 for e in s):  # type: ignore[arg-type]
         return [Signal(rule="EQ01", title="利润的现金含量充足", dimension="earnings_quality", severity="info",
@@ -187,7 +228,7 @@ def eq05_cash_collection(r: RuleCtx) -> list[Signal]:
         return []
     if all(float(e.value) < P["cash_rev_low"] for e in s):  # type: ignore[arg-type]
         return [Signal(rule="EQ05", title="收入回款偏弱", dimension="earnings_quality", severity="medium",
-                       period=s[0].period, summary="连续两年收现比低于 0.8：" + "、".join(f"{yr(e)} {cite(e)}" for e in s) + "。",
+                       period=s[0].period, summary=f"连续两年收现比低于 {tp(r, 'cash_rev_low')}：" + "、".join(f"{yr(e)} {cite(e)}" for e in s) + "。",
                        evidence=[e.id for e in s],
                        rationale="收现比含增值税，正常情况下接近或高于 1；持续偏低说明收入未能及时转化为现金（经验阈值）。")]
     return []
@@ -371,17 +412,17 @@ def md01_beneish(r: RuleCtx) -> list[Signal]:
         neutral = 0.0 if code == "m_tata" else 1.0
         contribs.append((coef * (float(comp.value) - neutral), comp))  # type: ignore[arg-type]
     contribs.sort(key=lambda x: -x[0])
-    drivers = "、".join(f"{c.label} {cite(c)}（贡献 {d:+.2f}）" for d, c in contribs[:2] if d > 0)
+    drivers = "、".join(f"{c.label} {cite(c)}" for d, c in contribs[:2] if d > 0)
     tail = f" 主要驱动：{drivers}。" if drivers else ""
     ev_ids = [e.id] + [c.id for d, c in contribs[:2] if d > 0]
     ref = "Beneish (1999), Financial Analysts Journal."
     if v > BENEISH_THRESHOLD:
         return [Signal(rule="MD01", title="Beneish 模型提示盈余操纵特征", dimension="models", severity="high", period=e.period,
-                       summary=f"{yr(e)} Beneish M-Score 为 {cite(e)}，高于判别阈值 {BENEISH_THRESHOLD}。{tail}",
+                       summary=f"{yr(e)} Beneish M-Score 为 {cite(e)}，高于判别阈值 {tp(r, 'beneish_threshold')}。{tail}",
                        evidence=ev_ids, threshold_type="literature", reference=ref,
                        rationale="模型基于美国样本估计，在 A 股作为排查线索而非结论：应结合驱动分项回到报表附注核实。")]
     return [Signal(rule="MD01", title="Beneish M-Score 接近警戒阈值", dimension="models", severity="low", period=e.period,
-                   summary=f"{yr(e)} Beneish M-Score 为 {cite(e)}，介于 {BENEISH_WATCH} 与 {BENEISH_THRESHOLD} 之间。{tail}",
+                   summary=f"{yr(e)} Beneish M-Score 为 {cite(e)}，介于 {tp(r, 'beneish_watch')} 与 {tp(r, 'beneish_threshold')} 之间。{tail}",
                    evidence=ev_ids, threshold_type="literature", reference=ref,
                    rationale="未超过判别阈值，但已进入常用的保守警戒区间。")]
 
@@ -395,14 +436,14 @@ def md02_altman(r: RuleCtx) -> list[Signal]:
     ref = "Altman (1968)；Z'' 见 Altman, Hartzell & Peck (1995)。"
     if v < ALTMAN_Z2_DISTRESS:
         return [Signal(rule="MD02", title="Altman Z'' 处于困境区", dimension="models", severity="high", period=e.period,
-                       summary=f"{yr(e)} Z''-Score 为 {cite(e)}，低于 {ALTMAN_Z2_DISTRESS}。", evidence=[e.id],
+                       summary=f"{yr(e)} Z''-Score 为 {cite(e)}，低于 {tp(r, 'altman_z2_distress')}。", evidence=[e.id],
                        threshold_type="literature", reference=ref, rationale="困境区企业的财务失败概率显著更高。")]
     if v < ALTMAN_Z2_SAFE:
         return [Signal(rule="MD02", title="Altman Z'' 处于灰色区", dimension="models", severity="medium", period=e.period,
-                       summary=f"{yr(e)} Z''-Score 为 {cite(e)}，介于 {ALTMAN_Z2_DISTRESS} 与 {ALTMAN_Z2_SAFE} 之间。",
+                       summary=f"{yr(e)} Z''-Score 为 {cite(e)}，介于 {tp(r, 'altman_z2_distress')} 与 {tp(r, 'altman_z2_safe')} 之间。",
                        evidence=[e.id], threshold_type="literature", reference=ref)]
     return [Signal(rule="MD02", title="Altman Z'' 处于安全区", dimension="models", severity="info", polarity="strength",
-                   period=e.period, summary=f"{yr(e)} Z''-Score 为 {cite(e)}，高于 {ALTMAN_Z2_SAFE}。", evidence=[e.id],
+                   period=e.period, summary=f"{yr(e)} Z''-Score 为 {cite(e)}，高于 {tp(r, 'altman_z2_safe')}。", evidence=[e.id],
                    threshold_type="literature", reference=ref)]
 
 
@@ -415,11 +456,11 @@ def md03_piotroski(r: RuleCtx) -> list[Signal]:
     ref = "Piotroski (2000), Journal of Accounting Research."
     if v <= 3:
         return [Signal(rule="MD03", title="Piotroski F-Score 偏弱", dimension="models", severity="medium", period=e.period,
-                       summary=f"{yr(e)} F-Score 为 {cite(e)}（满分 9）。", evidence=[e.id], threshold_type="literature",
+                       summary=f"{yr(e)} F-Score 为 {cite(e)}（满分 {tp(r, 'piotroski_max')}）。", evidence=[e.id], threshold_type="literature",
                        reference=ref, rationale="多项基本面信号同时恶化。")]
     if v >= 7:
         return [Signal(rule="MD03", title="Piotroski F-Score 强健", dimension="models", severity="info", polarity="strength",
-                       period=e.period, summary=f"{yr(e)} F-Score 为 {cite(e)}（满分 9）。", evidence=[e.id],
+                       period=e.period, summary=f"{yr(e)} F-Score 为 {cite(e)}（满分 {tp(r, 'piotroski_max')}）。", evidence=[e.id],
                        threshold_type="literature", reference=ref)]
     return []
 
@@ -490,6 +531,7 @@ def gv02_events(r: RuleCtx) -> list[Signal]:
 
 
 def run_rules(engine: Engine, data: CompanyData, periods: list[str]) -> list[Signal]:
+    register_params(engine.ledger)
     ctx = RuleCtx(engine, data, periods)
     signals: list[Signal] = []
     for fn in RULES:

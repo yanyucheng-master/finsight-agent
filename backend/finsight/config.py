@@ -40,20 +40,48 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
+# 大模型供应商预设（均为 OpenAI 兼容接口）。模型名会随供应商更新，以官方文档为准，可用 LLM_MODEL 覆盖。
+LLM_PROVIDERS: dict[str, dict[str, str]] = {
+    "deepseek": {"base_url": "https://api.deepseek.com", "model": "deepseek-flash", "key_env": "DEEPSEEK_API_KEY"},
+    "kimi": {"base_url": "https://api.moonshot.cn/v1", "model": "kimi-k3", "key_env": "KIMI_API_KEY"},
+    "intern": {"base_url": "https://chat.intern-ai.org.cn/api/v1", "model": "intern-s1", "key_env": "INTERN_API_KEY"},
+}
+
+
 @dataclass(frozen=True)
 class LLMSettings:
-    """OpenAI 兼容接口配置。默认指向 DeepSeek；也可切换到 Kimi / 通义 / GLM 等。"""
+    """OpenAI 兼容接口配置。测试默认 DeepSeek（低成本），正式参赛计划使用 Kimi。"""
 
+    provider: str = "deepseek"
     base_url: str = "https://api.deepseek.com"
     api_key: str = ""
     model: str = "deepseek-flash"
     temperature: float = 0.2
-    timeout_s: float = 90.0
+    timeout_s: float = 120.0
     max_tokens: int = 4000
 
     @property
     def enabled(self) -> bool:
         return bool(self.api_key)
+
+    def public(self) -> dict[str, str | bool]:
+        return {"provider": self.provider, "base_url": self.base_url, "model": self.model, "enabled": self.enabled}
+
+
+def llm_settings(provider: str | None = None) -> LLMSettings:
+    """按供应商读取配置：LLM_PROVIDER 选择预设；LLM_BASE_URL / LLM_MODEL / LLM_API_KEY 可整体覆盖。"""
+    name = (provider or _env("LLM_PROVIDER", "deepseek") or "deepseek").lower()
+    preset = LLM_PROVIDERS.get(name, LLM_PROVIDERS["deepseek"])
+    explicit = provider is not None  # 显式指定供应商时，只使用该供应商的预设与密钥
+    return LLMSettings(
+        provider=name,
+        base_url=(preset["base_url"] if explicit else _env("LLM_BASE_URL", preset["base_url"])) or preset["base_url"],
+        api_key=_env(preset["key_env"]) or ("" if explicit else _env("LLM_API_KEY")),
+        model=(preset["model"] if explicit else _env("LLM_MODEL", preset["model"])) or preset["model"],
+        temperature=_env_float("LLM_TEMPERATURE", 0.2),
+        timeout_s=_env_float("LLM_TIMEOUT_S", 120.0),
+        max_tokens=_env_int("LLM_MAX_TOKENS", 4000),
+    )
 
 
 @dataclass(frozen=True)
@@ -66,20 +94,13 @@ class Settings:
     # 智能体安全边界
     agent_max_steps: int = 6
     # 引擎版本：写入每次分析结果，便于追溯
-    engine_version: str = "0.1.0"
+    engine_version: str = "0.2.0"
 
 
 def load_settings() -> Settings:
     data_dir = Path(_env("FINSIGHT_DATA_DIR") or (PROJECT_ROOT / "data"))
     snapshot_dir = Path(_env("FINSIGHT_SNAPSHOT_DIR") or (data_dir / "snapshots"))
-    llm = LLMSettings(
-        base_url=_env("LLM_BASE_URL", "https://api.deepseek.com"),
-        api_key=_env("LLM_API_KEY") or _env("DEEPSEEK_API_KEY"),
-        model=_env("LLM_MODEL", "deepseek-flash"),
-        temperature=_env_float("LLM_TEMPERATURE", 0.2),
-        timeout_s=_env_float("LLM_TIMEOUT_S", 90.0),
-        max_tokens=_env_int("LLM_MAX_TOKENS", 4000),
-    )
+    llm = llm_settings()
     return Settings(
         data_dir=data_dir,
         snapshot_dir=snapshot_dir,

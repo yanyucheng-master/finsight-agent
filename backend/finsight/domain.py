@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 CompanyType = Literal["general", "bank", "insurance", "securities", "unknown"]
 PeriodType = Literal["FY", "H1", "Q1", "Q3", "Q2", "Q4", "OTHER"]
 Unit = Literal["CNY", "ratio", "times", "days", "score", "cny_per_share", "count", "text", "bool"]
-EvidenceKind = Literal["fact", "metric", "check", "signal", "model", "text", "event"]
+EvidenceKind = Literal["fact", "metric", "check", "signal", "model", "text", "event", "param"]
 Severity = Literal["high", "medium", "low", "info"]
 
 # 东方财富 F10 的 companyType 编码
@@ -84,6 +84,7 @@ class Evidence(BaseModel):
       model:  md:{model}@{period}
       signal: s:{rule}
       event:  e:{announcement_id}
+      param:  p:{name}                     阈值 / 模型参数（附文献或经验依据）
     """
 
     id: str
