@@ -4,4 +4,4 @@
 以便采集器 finsight/data/collector.py 能在裸 Python 环境中运行。
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
