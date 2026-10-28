@@ -21,9 +21,15 @@
 | `analytics/metrics.py`、`models.py` | 指标与 M / Z'' / F 模型（口径见文档字符串） |
 | `analytics/checks.py`、`rules.py` | 数据核验、风险信号（阈值集中在 `RULE_PARAMS`） |
 | `analytics/diagnosis.py` | 体检主流程 → `DiagnosisResult` |
+| `llm/gateway.py` | OpenAI 兼容网关 + `MockLLM`（测试一律用 Mock，禁止在测试中调用外部 API） |
+| `reporting/verifier.py` | 结论核验器（数字抽取、引用关联、单位换算、容差比对、合规检查） |
+| `reporting/report.py` | 证据上下文（E1..En）、LLM 简报 + 修订循环、模板降级 |
+| `agent/research_agent.py` | 研究问答智能体（工具定义 `TOOLS`、会话证据编号、答案核验） |
 | `api/app.py`、`cli.py` | FastAPI 与命令行 |
+| `../../frontend/` | React 工作台；`npm run build` 输出到 `backend/finsight/web/`，由 FastAPI 托管 |
 
-证据 ID：`f:{科目}@{期末}`、`m:{指标}@{期末}`、`c:{核验}@{期末}`、`s:{规则}@{期}`、`e:{公告ID}`、`t:audit@{期末}`。
+证据 ID：`f:{科目}@{期末}`、`m:{指标}@{期末}`、`c:{核验}@{期末}`、`s:{规则}@{期}`、`e:{公告ID}`、`t:audit@{期末}`、`p:{阈值名}`；同业证据加公司前缀 `000858|m:...`。
+LLM 输出中的引用格式为 `[E12]`（会话内短编号，由上下文构建器映射到证据 ID）。
 
 ## 常用命令
 
@@ -32,7 +38,11 @@ python -m venv .venv && . .venv/bin/activate && pip install -e "backend[dev]"
 cd backend && python -m pytest                 # 全部测试（集成测试依赖 data/snapshots）
 python -m finsight.cli diagnose 600519         # 终端体检
 python -m finsight.cli verify-snapshots        # 快照完整性
-python -m finsight.cli serve                   # API：http://127.0.0.1:8000/docs
+python -m finsight.cli serve                   # 工作台 http://127.0.0.1:8000 ；API 文档 /docs
+python -m finsight.cli report 600519 --mode template   # 可验证简报（--mode llm 需要 Key）
+python -m finsight.cli ask 600519 "问题"        # 研究问答（需要 Key）
+cd frontend && npm install && npm run build    # 前端构建（输出到 backend/finsight/web）
+node frontend/e2e/smoke.cjs                    # 端到端冒烟（需先 serve）
 ruff check finsight tests
 ```
 
@@ -42,4 +52,6 @@ ruff check finsight tests
 - 用户本机项目路径为 `C:\Users\YYC\Projects\finsight-agent`，这是代码的“真身”。云端改动完成后，必须同步回这个文件夹（device_commit_files）。
 - 新数据由用户在本机运行 `scripts\collect.bat` 采集，再从本机 stage 到容器的 `data/snapshots`。
 - 用户本机有 Anaconda；电脑操作权限**不能控制终端类应用**，需要运行命令时请用户双击 `.bat`。
-- LLM：DeepSeek（OpenAI 兼容），`LLM_BASE_URL=https://api.deepseek.com`，`LLM_MODEL=deepseek-flash`（模型名以官方文档为准），Key 放在 `.env` 中，禁止提交到仓库。
+- LLM：测试用 DeepSeek，参赛用 Kimi（用户决定）。Key 由用户运行 `scripts\setup_env.bat` 写入本机 `.env`（远程工具禁止写 .env），禁止提交到仓库。
+- 真实模型测试：用户运行 `scripts\llm_smoke.bat`，结果写入 `data\runs\`，再 stage 回容器复核。
+- 参赛赛题：主题赛 2「AI+金融赋能应用赛」（见 docs/COMPETITION.md）。
