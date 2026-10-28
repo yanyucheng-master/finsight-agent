@@ -303,7 +303,11 @@ class ResearchAgent:
                 messages += [resp.as_message(),
                              {"role": "user", "content": "核验器发现以下问题，请修改后重新作答（数字必须来自已获取的证据并标注编号，"
                                                          f"否则删除；不要再调用工具）：\n{problems}\n{flags}"}]
-                resp = self.llm.chat(messages, tools=TOOLS, tool_choice="none")
+                try:
+                    resp = self.llm.chat(messages, tools=TOOLS, tool_choice="none")
+                except LLMError as exc:  # 修订失败时保留原回答（已标注问题），而不是整体报错
+                    warnings.append(f"修订请求失败，保留原回答：{exc}")
+                    break
                 meter.add(resp)
                 attempts += 1
                 new_answer = resp.content.strip()

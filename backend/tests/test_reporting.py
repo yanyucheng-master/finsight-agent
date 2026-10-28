@@ -147,3 +147,18 @@ def test_report_revision_passes_back_reasoning(diag):
 def test_empty_llm_report_falls_back_to_template(diag):
     rep = generate_report(diag, llm=MockLLM(script=[""]), mode="llm")
     assert rep.mode == "template" and any("空报告" in w for w in rep.warnings)
+
+
+def test_failed_revision_keeps_annotated_draft(diag):
+    good, _ = _good_sentence(diag)
+    calls = {"n": 0}
+
+    def responder(messages, tools):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return f"## 核心结论\n{good}市占率 37.5%。"
+        raise LLMError("HTTP 400: tool_choice not supported")
+
+    rep = generate_report(diag, llm=MockLLM(responder=responder), mode="llm")
+    assert rep.mode == "llm" and rep.verification.unverified == 1
+    assert any("保留初稿" in w for w in rep.warnings) and "⚠️〔未核验〕" in rep.annotated_markdown

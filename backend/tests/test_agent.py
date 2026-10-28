@@ -100,3 +100,20 @@ def test_reasoning_is_passed_back_and_revision_disables_tools(env):
     assert revision["messages"][-2]["reasoning_content"] == "组织答案"
     assert revision["tools"] == TOOLS and revision["tool_choice"] == "none"
     assert ans.verification.passed and ans.attempts == 2
+
+
+def test_failed_revision_keeps_answer(env):
+    from finsight.llm.gateway import LLMError
+
+    diag, _ = env
+    good = f"净现比为 {shown(diag, 'ocf_to_np')}[E1]。"
+    script = [call("get_metrics", codes=["ocf_to_np"]), good + "行业平均约为 1.35 倍。"]
+
+    def responder(messages, tools):
+        if script:
+            return script.pop(0)
+        raise LLMError("HTTP 400: tool_choice none unsupported")
+
+    ans = ResearchAgent(diag, MockLLM(responder=responder)).ask("净现比？")
+    assert ans.answer.startswith("净现比为") and ans.verification.unverified == 1
+    assert any("保留原回答" in w for w in ans.warnings)

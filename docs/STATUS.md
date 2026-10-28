@@ -20,7 +20,7 @@
 | **评测①：核验器检出率** `evaluation/verifier_bench.py` | 向 9 家公司的模板简报（130 个带引用的数字）逐个注入 7 类数字错误，共 799 例：**全部检出（100%）**；原文 130 例零误报；127 例合理四舍五入全部通过。属于受控注入评测，真实模型输出的评测待本机运行 | `finsight eval verifier`，报告见 `docs/eval/verifier_bench.md`；回归测试 |
 | API / CLI | `/diagnosis`、`/evidence/{id}`、`/report`、`/ask`、`/llm`；`finsight diagnose / report / ask / llm-check / verify-snapshots / serve` | API 测试 |
 
-测试：`cd backend && python -m pytest`，**33 项全部通过**；前端 `npm run build` 通过；`node frontend/e2e/smoke.cjs` 通过。
+测试：`cd backend && python -m pytest`，**51 项全部通过**；前端 `npm run build` 通过；`node frontend/e2e/smoke.cjs` 通过。
 
 ## 本机大模型调用排查（2026-10-28）
 

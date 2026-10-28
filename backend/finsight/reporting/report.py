@@ -208,7 +208,11 @@ def generate_report(result: DiagnosisResult, *, llm: LLMClient | None = None, mo
             while not v.passed and attempts <= max_revisions:
                 # 推理模型要求回传完整的 assistant 消息（含 reasoning_content）
                 messages += [resp.as_message(), {"role": "user", "content": _revision_prompt(v)}]
-                resp = llm.chat(messages)  # type: ignore[union-attr]
+                try:
+                    resp = llm.chat(messages)  # type: ignore[union-attr]
+                except LLMError as exc:  # 修订失败不应丢掉初稿：保留初稿并标注问题
+                    warnings.append(f"修订请求失败，保留初稿：{exc}")
+                    break
                 meter.add(resp)
                 attempts += 1
                 new_text = resp.content.strip()
