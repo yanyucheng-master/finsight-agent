@@ -1,0 +1,110 @@
+{
+ "seed": 20261028,
+ "companies": [
+  {
+   "code": "000002",
+   "name": "万科A",
+   "claims": 21
+  },
+  {
+   "code": "000568",
+   "name": "泸州老窖",
+   "claims": 12
+  },
+  {
+   "code": "000651",
+   "name": "格力电器",
+   "claims": 12
+  },
+  {
+   "code": "000858",
+   "name": "五粮液",
+   "claims": 12
+  },
+  {
+   "code": "002069",
+   "name": "獐子岛",
+   "claims": 14
+  },
+  {
+   "code": "002450",
+   "name": "康得退",
+   "claims": 19
+  },
+  {
+   "code": "300750",
+   "name": "宁德时代",
+   "claims": 12
+  },
+  {
+   "code": "600518",
+   "name": "康美药业",
+   "claims": 16
+  },
+  {
+   "code": "600519",
+   "name": "贵州茅台",
+   "claims": 12
+  }
+ ],
+ "detection": {
+  "perturb_1pct": {
+   "cases": 122,
+   "detected": 122,
+   "rate": 1.0,
+   "misses": []
+  },
+  "perturb_5pct": {
+   "cases": 125,
+   "detected": 125,
+   "rate": 1.0,
+   "misses": []
+  },
+  "perturb_20pct": {
+   "cases": 129,
+   "detected": 129,
+   "rate": 1.0,
+   "misses": []
+  },
+  "shift_decimal": {
+   "cases": 129,
+   "detected": 129,
+   "rate": 1.0,
+   "misses": []
+  },
+  "unit_swap": {
+   "cases": 34,
+   "detected": 34,
+   "rate": 1.0,
+   "misses": []
+  },
+  "wrong_ref": {
+   "cases": 130,
+   "detected": 130,
+   "rate": 1.0,
+   "misses": []
+  },
+  "fabricate_uncited": {
+   "cases": 130,
+   "detected": 130,
+   "rate": 1.0,
+   "misses": []
+  }
+ },
+ "controls": {
+  "unchanged": {
+   "cases": 130,
+   "passed": 130,
+   "rate": 1.0,
+   "failures": []
+  },
+  "rounding_ok": {
+   "cases": 127,
+   "passed": 127,
+   "rate": 1.0,
+   "failures": []
+  }
+ },
+ "overall_detection_rate": 1.0,
+ "false_positive_rate": 0.0
+}

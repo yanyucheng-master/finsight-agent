@@ -17,9 +17,10 @@
 | **可验证研究简报** `reporting/report.py` | 证据清单（E1..En）→ LLM 撰写 → 核验 → 打回修订一次 → 定稿 / 标红；无 LLM 时降级为模板 | 模板简报：9 家共 130 个数字全部核验通过；Mock：幻觉被抓住并修订 |
 | **研究问答智能体** `agent/research_agent.py` | 8 个确定性工具（指标、科目、信号、模型分解、公告检索、数据核验、同业比较、指标目录）；证据会话编号；答案核验与修订；步数上限 | 5 项 Mock 测试 |
 | **前端工作台** `frontend/` | React + TS + Tailwind + ECharts。页面：首页、风险体检、研究简报、智能问答、指标趋势、财务报表、数据核验；全局“证据溯源抽屉”可回溯到原始字段、SHA-256、URL | `npm run build` 类型检查通过；Playwright 冒烟测试 0 个控制台错误 |
+| **评测①：核验器检出率** `evaluation/verifier_bench.py` | 向 9 家公司的模板简报（130 个带引用的数字）逐个注入 7 类数字错误，共 799 例：**全部检出（100%）**；原文 130 例零误报；127 例合理四舍五入全部通过。属于受控注入评测，真实模型输出的评测待本机运行 | `finsight eval verifier`，报告见 `docs/eval/verifier_bench.md`；回归测试 |
 | API / CLI | `/diagnosis`、`/evidence/{id}`、`/report`、`/ask`、`/llm`；`finsight diagnose / report / ask / llm-check / verify-snapshots / serve` | API 测试 |
 
-测试：`cd backend && python -m pytest`，**32 项全部通过**；前端 `npm run build` 通过；`node frontend/e2e/smoke.cjs` 通过。
+测试：`cd backend && python -m pytest`，**33 项全部通过**；前端 `npm run build` 通过；`node frontend/e2e/smoke.cjs` 通过。
 
 ## 尚未验证（需要用户本机操作）
 
@@ -47,6 +48,6 @@
 ## 下一步（按顺序）
 
 1. 读取用户本机的冒烟测试结果，根据真实模型表现调优提示词（DeepSeek 与 Kimi 都要测）。
-2. M4 评测：①核验器检出率（向正确简报注入错误，自动统计）；②有 / 无核验的数字幻觉率对比；③基于原始年报 PDF 的历史案例回测；④耗时与成本。
+2. M4 评测：①核验器检出率（已完成）；②有 / 无核验的数字幻觉率对比（真实模型）；③基于原始年报 PDF 的历史案例回测；④耗时与成本。
 3. 追溯调整信号；按时间点体检（站在历史年份看当时的报表）。
 4. 部署方案与提交材料（方案书 / 视频脚本）。

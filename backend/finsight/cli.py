@@ -150,6 +150,18 @@ def cmd_ask(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_eval(args: argparse.Namespace) -> int:
+    from finsight.evaluation.verifier_bench import run, save, to_markdown
+
+    if args.which == "verifier":
+        summary = run(_service(), seed=args.seed)
+        out = Path(args.out) if args.out else load_settings().data_dir.parent / "docs" / "eval"
+        j, m = save(summary, out)
+        print(to_markdown(summary))
+        print(f"已写入 {j} 与 {m}")
+    return 0
+
+
 def cmd_verify(args: argparse.Namespace) -> int:
     from finsight.data.snapshots import SnapshotIntegrityError, SnapshotStore
 
@@ -212,6 +224,11 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("llm-check", help="检查大模型 API 连通性")
     p.add_argument("--provider", choices=["deepseek", "kimi", "intern"], default="deepseek")
     p.set_defaults(func=cmd_llm_check)
+    p = sub.add_parser("eval", help="运行评测（verifier：核验器错误检出率）")
+    p.add_argument("which", choices=["verifier"])
+    p.add_argument("--seed", type=int, default=20261028)
+    p.add_argument("--out", default="")
+    p.set_defaults(func=cmd_eval)
     p = sub.add_parser("verify-snapshots", help="校验快照完整性")
     p.set_defaults(func=cmd_verify)
     p = sub.add_parser("serve", help="启动 API 服务")

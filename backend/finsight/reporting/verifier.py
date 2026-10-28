@@ -158,7 +158,7 @@ def _attribute(display: float, num: str, unit: str | None, refs: dict[str, Evide
     if named:
         return named[0]
     digits = len(num.replace(",", "").replace(".", "").lstrip("0"))
-    return hits[0] if len(hits) == 1 and digits >= 3 else None
+    return hits[0] if len(hits) == 1 and digits >= 4 else None
 
 
 def _sentence_at(text: str, pos: int) -> str:

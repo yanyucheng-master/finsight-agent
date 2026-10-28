@@ -117,3 +117,18 @@ def test_llm_failure_falls_back_to_template(diag):
 def test_llm_response_message_roundtrip():
     resp = LLMResponse(content="ok")
     assert resp.as_message() == {"role": "assistant", "content": "ok"}
+
+
+def test_verifier_benchmark_detects_injected_errors():
+    """回归保护：受控注入的数字错误应被几乎全部检出，且原文零误报。"""
+    from finsight.config import load_settings
+    from finsight.data.service import load_service
+    from finsight.evaluation.verifier_bench import run
+
+    svc = load_service(load_settings().snapshot_dir)
+    if len(svc.available_symbols()) < 3:
+        pytest.skip("快照不足")
+    s = run(svc)
+    assert s["overall_detection_rate"] >= 0.99
+    assert s["false_positive_rate"] == 0.0
+    assert s["controls"]["rounding_ok"]["rate"] >= 0.99
