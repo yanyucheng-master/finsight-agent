@@ -51,7 +51,8 @@ ruff check finsight tests
 - **云端开发容器**的出网有白名单：东方财富、巨潮、交易所、DeepSeek 等都返回 403。所以实时取数和 LLM 调用只能在用户的 Windows 电脑上进行。
 - 用户本机项目路径为 `C:\Users\YYC\Projects\finsight-agent`，这是代码的“真身”。云端改动完成后，必须同步回这个文件夹（device_commit_files）。
 - 新数据由用户在本机运行 `scripts\collect.bat` 采集，再从本机 stage 到容器的 `data/snapshots`。
-- 用户本机有 Anaconda；电脑操作权限**不能控制终端类应用**，需要运行命令时请用户双击 `.bat`。
+- `_python.bat` 在用户本机实际找到的是 Python 3.14（`AppData\Local\Programs\Python\Python314`，标准 Anaconda 路径下没有）；依赖由 `_deps.bat` 首次运行时自动安装到这个 Python。电脑操作权限**不能控制终端类应用**，需要运行命令时请用户双击 `.bat`。
+- 两家大模型都是推理模型，网关已适配（见 `config.LLM_PROVIDERS` 注释）：改动请求参数前先查官方文档，并在 `tests/test_gateway.py` 里补测试。
 - LLM：测试用 DeepSeek，参赛用 Kimi（用户决定）。Key 由用户运行 `scripts\setup_env.bat` 写入本机 `.env`（远程工具禁止写 .env），禁止提交到仓库。
 - 真实模型测试：用户运行 `scripts\llm_smoke.bat`，结果写入 `data\runs\`，再 stage 回容器复核。
 - 参赛赛题：主题赛 2「AI+金融赋能应用赛」（见 docs/COMPETITION.md）。

@@ -36,12 +36,14 @@
 React 前端（工作台：体检 | 财务数据 | 研报 | 问答 | 溯源抽屉）
         │ REST / SSE
 FastAPI ─┬─ 体检工作流（确定性，无 LLM）── analytics/diagnosis.py
-         └─ 研究智能体（LLM 工具调用，步数受限）── 下一阶段
+         ├─ 可验证简报（证据清单 → LLM 撰写 → 核验 → 修订）── reporting/report.py
+         └─ 研究智能体（LLM 工具调用，步数受限）── agent/research_agent.py
+              │        大模型网关（OpenAI 兼容，适配推理模型）── llm/gateway.py
               │
   ┌───────────┼──────────────────────┬──────────────────┬─────────────────┐
   数据层        标准化                  计算引擎             证据账本            核验
   collector    schema.py 科目表         engine.V（依赖追踪） ledger.py          checks.py 数据核验
-  snapshots    eastmoney.py 解析        metrics / models    （事实→指标→信号）  verifier（LLM 结论核验，下一阶段）
+  snapshots    eastmoney.py 解析        metrics / models    （事实→指标→信号）  verifier.py（LLM 结论核验）
   service      CompanyData             rules.py 风险信号
 ```
 
@@ -53,7 +55,8 @@ FastAPI ─┬─ 体检工作流（确定性，无 LLM）── analytics/diagn
 | 2 | **工作流 + 智能体混合**：体检走固定流程；开放问答走受限工具调用；不引入多智能体框架 | 可预测的任务用工作流更可靠、更便宜；避免为复杂而复杂 |
 | 3 | **原始响应内容寻址快照**（SHA-256），分析只读快照 | 可复现、可离线演示、可审计；云端开发环境无法访问国内数据源 |
 | 4 | Python 3.10+ / FastAPI / Pydantic；前端 React + TS + Vite；不用 LangChain | 金融数据生态以 Python 为主；轻依赖，控制力强 |
-| 5 | 大模型网关兼容 OpenAI 协议：测试用 DeepSeek（`deepseek-flash`），参赛用 Kimi（`kimi-k3`，以官方文档为准），也可切换书生等 | 成本可控、支持工具调用；无 Key 时降级为模板报告 |
+| 5 | 大模型网关兼容 OpenAI 协议：测试用 DeepSeek（`deepseek-flash`），参赛用 Kimi（`kimi-k3.1-pro`，以官方文档为准），也可切换书生等 | 成本可控、支持工具调用；无 Key 时降级为模板报告 |
+| 12 | 网关按模型族适配推理模型：发送 `reasoning_effort`（默认 low）；Kimi K3 系列不发送 temperature 等固定采样参数；多轮与工具调用时原样回传 `reasoning_content`；max_tokens 按推理模型放大；“200 但正文为空”视为截断错误 | 本机首次实测：max_tokens 过小时两家都返回空回复；查阅官方文档发现 DeepSeek 带工具时不回传思考内容会 400、Kimi K3 传 temperature 会报错 |
 | 10 | 阈值和模型参数也登记为证据（`p:`），报告里的阈值数字同样可引用、可核验 | 实测发现“低于 1.10”这类阈值数字会被核验器判为无证据 |
 | 11 | 回测必须使用原始披露数据，不能直接用数据源的历史值 | 数据源保存的是追溯调整后的数据，直接回测会泄露未来信息 |
 | 6 | 金额统一用“元”，比率用小数；展示层再换算 | 避免单位混乱，这是核验器能逐字比对的前提 |

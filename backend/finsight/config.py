@@ -55,11 +55,24 @@ def _env_int(name: str, default: int) -> int:
 
 
 # 大模型供应商预设（均为 OpenAI 兼容接口）。模型名会随供应商更新，以官方文档为准，可用 LLM_MODEL 覆盖。
-LLM_PROVIDERS: dict[str, dict[str, str]] = {
-    "deepseek": {"base_url": "https://api.deepseek.com", "model": "deepseek-flash", "key_env": "DEEPSEEK_API_KEY"},
-    "kimi": {"base_url": "https://api.moonshot.cn/v1", "model": "kimi-k3", "key_env": "KIMI_API_KEY"},
-    "intern": {"base_url": "https://chat.intern-ai.org.cn/api/v1", "model": "intern-s1", "key_env": "INTERN_API_KEY"},
+#
+# 两家都是“推理模型”（2026-10 查阅官方文档）：
+# * DeepSeek deepseek-flash：思考模式默认开启（effort 默认 high），用 thinking={"type": enabled/disabled} 开关，
+#   reasoning_effort 取 low/high/max；思考模式下 temperature 不生效；带 tools 的多轮请求必须回传 reasoning_content，否则 400。
+# * Kimi kimi-k3 / kimi-k3.1-pro：始终思考，顶层 reasoning_effort 取 low/high/max（默认 max）；
+#   temperature=1.0、top_p=0.95 等采样参数固定，传其他值会报错，所以不发送；多轮与工具调用要回传完整 assistant 消息。
+# * 两家的思考内容都计入 max_tokens，上限过小会出现“HTTP 200 但回复为空”（正是本机首次诊断看到的现象）。
+LLM_PROVIDERS: dict[str, dict[str, str | int]] = {
+    "deepseek": {"base_url": "https://api.deepseek.com", "model": "deepseek-flash", "key_env": "DEEPSEEK_API_KEY",
+                 "max_tokens": 16384},
+    # 选 k3.1-pro 而非 k3：较新（2026-10-23 发布）、第三方资料显示单价更低且幻觉率更低；用户的 Key 已确认可用
+    "kimi": {"base_url": "https://api.moonshot.cn/v1", "model": "kimi-k3.1-pro", "key_env": "KIMI_API_KEY",
+             "max_tokens": 32768},
+    "intern": {"base_url": "https://chat.intern-ai.org.cn/api/v1", "model": "intern-s1", "key_env": "INTERN_API_KEY",
+               "max_tokens": 8192},
 }
+
+REASONING_EFFORTS = ("none", "low", "high", "max")
 
 
 @dataclass(frozen=True)
@@ -71,15 +84,19 @@ class LLMSettings:
     api_key: str = ""
     model: str = "deepseek-flash"
     temperature: float = 0.2
-    timeout_s: float = 120.0
-    max_tokens: int = 4000
+    timeout_s: float = 300.0
+    max_tokens: int = 16384
+    # 推理强度：none（仅对可关闭思考的模型有效）/ low / high / max。默认 low：本系统的写作任务以“按证据清单表述”为主，
+    # 低强度足够且显著更快、更省；数字正确性由核验器保证。可用 LLM_REASONING_EFFORT 调整。
+    reasoning_effort: str = "low"
 
     @property
     def enabled(self) -> bool:
         return bool(self.api_key)
 
-    def public(self) -> dict[str, str | bool]:
-        return {"provider": self.provider, "base_url": self.base_url, "model": self.model, "enabled": self.enabled}
+    def public(self) -> dict[str, str | bool | int]:
+        return {"provider": self.provider, "base_url": self.base_url, "model": self.model, "enabled": self.enabled,
+                "reasoning_effort": self.reasoning_effort, "max_tokens": self.max_tokens}
 
 
 def llm_settings(provider: str | None = None) -> LLMSettings:
@@ -87,14 +104,17 @@ def llm_settings(provider: str | None = None) -> LLMSettings:
     name = (provider or _env("LLM_PROVIDER", "deepseek") or "deepseek").lower()
     preset = LLM_PROVIDERS.get(name, LLM_PROVIDERS["deepseek"])
     explicit = provider is not None  # 显式指定供应商时，只使用该供应商的预设与密钥
+    effort = _env("LLM_REASONING_EFFORT", "low").lower()
     return LLMSettings(
         provider=name,
-        base_url=(preset["base_url"] if explicit else _env("LLM_BASE_URL", preset["base_url"])) or preset["base_url"],
-        api_key=_env(preset["key_env"]) or ("" if explicit else _env("LLM_API_KEY")),
-        model=(preset["model"] if explicit else _env("LLM_MODEL", preset["model"])) or preset["model"],
+        base_url=str((preset["base_url"] if explicit else _env("LLM_BASE_URL", str(preset["base_url"])))
+                     or preset["base_url"]),
+        api_key=_env(str(preset["key_env"])) or ("" if explicit else _env("LLM_API_KEY")),
+        model=str((preset["model"] if explicit else _env("LLM_MODEL", str(preset["model"]))) or preset["model"]),
         temperature=_env_float("LLM_TEMPERATURE", 0.2),
-        timeout_s=_env_float("LLM_TIMEOUT_S", 120.0),
-        max_tokens=_env_int("LLM_MAX_TOKENS", 4000),
+        timeout_s=_env_float("LLM_TIMEOUT_S", 300.0),
+        max_tokens=_env_int("LLM_MAX_TOKENS", int(preset["max_tokens"])),
+        reasoning_effort=effort if effort in REASONING_EFFORTS else "low",
     )
 
 

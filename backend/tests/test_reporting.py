@@ -132,3 +132,18 @@ def test_verifier_benchmark_detects_injected_errors():
     assert s["overall_detection_rate"] >= 0.99
     assert s["false_positive_rate"] == 0.0
     assert s["controls"]["rounding_ok"]["rate"] >= 0.99
+
+
+def test_report_revision_passes_back_reasoning(diag):
+    good, _ = _good_sentence(diag)
+    draft = LLMResponse(content=f"## 核心结论\n{good}净资产收益率高达 45.6%。", reasoning="思考过程")
+    llm = MockLLM(script=[draft, f"## 核心结论\n{good}"])
+    rep = generate_report(diag, llm=llm, mode="llm")
+    assert llm.requests[1]["messages"][-2] == {"role": "assistant", "content": draft.content,
+                                               "reasoning_content": "思考过程"}
+    assert rep.verification.passed and rep.revised
+
+
+def test_empty_llm_report_falls_back_to_template(diag):
+    rep = generate_report(diag, llm=MockLLM(script=[""]), mode="llm")
+    assert rep.mode == "template" and any("空报告" in w for w in rep.warnings)

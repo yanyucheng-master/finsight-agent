@@ -84,8 +84,18 @@ def cmd_report(args: argparse.Namespace) -> int:
     return 0
 
 
+CHECK_TOOL = {"type": "function", "function": {
+    "name": "lookup_metric", "description": "查询一家公司某个财务指标的最新取值",
+    "parameters": {"type": "object", "properties": {"code": {"type": "string", "description": "6 位股票代码"},
+                                                    "metric": {"type": "string", "description": "指标代码"}},
+                   "required": ["code", "metric"]}}}
+
+
 def cmd_llm_check(args: argparse.Namespace) -> int:
-    """连通性自检：列出可用模型，并做一次极短的对话。结果写入 data/runs/ 便于排查。"""
+    """连通性自检：①列出可用模型 ②一次短对话 ③一次两轮的工具调用（验证 reasoning_content 回传）。
+
+    结果写入 data/runs/llm_check_{provider}.json，便于开发会话排查。工具返回值是写死的测试值（synthetic）。
+    """
     import json
     import time
 
@@ -93,29 +103,78 @@ def cmd_llm_check(args: argparse.Namespace) -> int:
     from finsight.llm.gateway import LLMError, make_client
 
     cfg = llm_settings(args.provider)
-    report: dict = {"provider": cfg.provider, "base_url": cfg.base_url, "model": cfg.model, "key_configured": cfg.enabled}
+    report: dict = {**cfg.public(), "key_configured": cfg.enabled}
+    tag = f"[{cfg.provider} / {cfg.model} / 推理强度 {cfg.reasoning_effort}]"
     if not cfg.enabled:
-        print(f"[{cfg.provider}] 未配置 API Key")
+        print(f"{tag} 未配置 API Key")
         report["error"] = "no key"
     else:
         try:
             client = make_client(cfg)
             try:
-                report["models"] = client.list_models()[:50]
+                models = client.list_models()
+                report["models"] = models[:50]
+                if cfg.model not in models:
+                    report["warning"] = f"模型 {cfg.model} 不在该 Key 的可用列表中"
+                    print(f"{tag} 警告：{report['warning']}")
             except Exception as exc:  # 部分平台不开放 /models
                 report["models_error"] = str(exc)[:200]
             t0 = time.monotonic()
-            resp = client.chat([{"role": "user", "content": "只回复两个字：正常"}], max_tokens=20)
-            report.update({"reply": resp.content, "usage": resp.usage, "latency_ms": int((time.monotonic() - t0) * 1000),
-                           "served_model": resp.model})
-            print(f"[{cfg.provider}] 连通正常：模型 {resp.model}，回复「{resp.content.strip()}」，耗时 {report['latency_ms']} ms")
+            resp = client.chat([{"role": "user", "content": "只回复两个字：正常"}], max_tokens=2048)
+            report["chat"] = {"reply": resp.content, "finish_reason": resp.finish_reason, "usage": resp.usage,
+                              "reasoning_chars": len(resp.reasoning), "served_model": resp.model,
+                              "latency_ms": int((time.monotonic() - t0) * 1000)}
+            print(f"{tag} 对话正常：回复「{resp.content.strip()}」，思考 {len(resp.reasoning)} 字，"
+                  f"耗时 {report['chat']['latency_ms']} ms，用量 {resp.usage}")
         except LLMError as exc:
             report["error"] = str(exc)
-            print(f"[{cfg.provider}] 失败：{exc}")
+            print(f"{tag} 对话失败：{exc}")
+        if "error" not in report:
+            report["tool_roundtrip"] = _tool_roundtrip(client, tag)
+            if not report["tool_roundtrip"].get("passed"):
+                report["error"] = "工具调用往返未通过：" + str(report["tool_roundtrip"].get("error") or "见详情")
     out = load_settings().data_dir / "runs" / f"llm_check_{cfg.provider}.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(report, ensure_ascii=False, indent=1), encoding="utf-8")
     return 0 if "error" not in report else 1
+
+
+def _tool_roundtrip(client, tag: str) -> dict:
+    """模拟智能体的一步：模型调用工具 → 回传工具结果（连同 reasoning_content）→ 模型据此作答。"""
+    import json
+    import time
+
+    from finsight.llm.gateway import LLMError
+
+    out: dict = {"passed": False}
+    messages = [{"role": "user", "content": "请调用 lookup_metric 工具查询 600519 的 gross_margin，"
+                                            "然后用一句话告诉我结果，数值照抄工具返回值。"}]
+    t0 = time.monotonic()
+    try:
+        first = client.chat(messages, tools=[CHECK_TOOL])
+        out.update({"tool_calls": [{"name": t.name, "arguments": t.arguments} for t in first.tool_calls],
+                    "first_finish_reason": first.finish_reason, "first_reasoning_chars": len(first.reasoning)})
+        if not first.tool_calls:
+            out["error"] = f"模型没有调用工具，直接回答：{first.content[:120]}"
+            print(f"{tag} 工具调用：{out['error']}")
+            return out
+        messages.append(first.as_message())
+        for tc in first.tool_calls:
+            messages.append({"role": "tool", "tool_call_id": tc.id,
+                             "content": json.dumps({"metric": "gross_margin", "period": "2025", "value": "91.18%"},
+                                                   ensure_ascii=False)})
+        final = client.chat(messages, tools=[CHECK_TOOL])
+        out.update({"final_reply": final.content[:300], "final_finish_reason": final.finish_reason,
+                    "usage": [first.usage, final.usage], "latency_ms": int((time.monotonic() - t0) * 1000)})
+        out["passed"] = "91.18" in final.content
+        if not out["passed"]:
+            out["error"] = "最终回答没有使用工具返回值"
+        print(f"{tag} 工具调用往返{'通过' if out['passed'] else '未通过'}：调用 {first.tool_calls[0].name}"
+              f"{first.tool_calls[0].arguments} → 回答「{final.content.strip()[:80]}」，耗时 {out['latency_ms']} ms")
+    except LLMError as exc:
+        out["error"] = str(exc)
+        print(f"{tag} 工具调用往返失败：{exc}")
+    return out
 
 
 def cmd_ask(args: argparse.Namespace) -> int:

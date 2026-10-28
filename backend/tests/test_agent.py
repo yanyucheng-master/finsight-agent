@@ -83,3 +83,20 @@ def test_step_limit_forces_final_answer(env):
     llm = MockLLM(script=loop + ["基于已获取信息：整体风险较低。"])
     ans = ResearchAgent(diag, llm, max_steps=3).ask("有哪些风险？")
     assert any("最大工具调用步数" in w for w in ans.warnings) and ans.answer
+
+
+def test_reasoning_is_passed_back_and_revision_disables_tools(env):
+    """推理模型（DeepSeek 思考模式 / Kimi K3）要求在后续请求中回传 reasoning_content。"""
+    diag, _ = env
+    good = f"净现比为 {shown(diag, 'ocf_to_np')}[E1]。"
+    first = call("get_metrics", codes=["ocf_to_np"])
+    first.reasoning = "需要先查净现比"
+    draft = LLMResponse(content=good + "行业平均约为 1.35 倍。", reasoning="组织答案")
+    llm = MockLLM(script=[first, draft, good])
+    ans = ResearchAgent(diag, llm).ask("净现比怎么样？")
+    tool_turn = next(m for m in llm.requests[1]["messages"] if m["role"] == "assistant")
+    assert tool_turn["reasoning_content"] == "需要先查净现比" and tool_turn["tool_calls"]
+    revision = llm.requests[-1]
+    assert revision["messages"][-2]["reasoning_content"] == "组织答案"
+    assert revision["tools"] == TOOLS and revision["tool_choice"] == "none"
+    assert ans.verification.passed and ans.attempts == 2

@@ -270,6 +270,9 @@ class ResearchAgent:
         warnings: list[str] = []
         answer = ""
         try:
+            # 说明：后续请求始终带同一份 TOOLS（不需要工具时用 tool_choice="none"），
+            # 既符合“历史中有工具调用”的接口约束，也让提示前缀保持不变、提高缓存命中。
+            # 每条 assistant 消息都用 resp.as_message() 原样回传（推理模型要求带 reasoning_content）。
             for _ in range(self.max_steps):
                 resp = self.llm.chat(messages, tools=TOOLS)
                 meter.add(resp)
@@ -284,24 +287,29 @@ class ResearchAgent:
             else:
                 warnings.append(f"达到最大工具调用步数 {self.max_steps}，已要求模型直接作答")
                 messages.append({"role": "user", "content": "请基于已获取的证据直接给出回答，不再调用工具。"})
-                resp = self.llm.chat(messages)
+                resp = self.llm.chat(messages, tools=TOOLS, tool_choice="none")
                 meter.add(resp)
                 answer = resp.content.strip()
+            if not answer:
+                warnings.append("模型没有给出文字回答")
+            if resp.truncated:
+                warnings.append("模型输出达到长度上限，回答可能不完整")
             refs = self.s.refs_map()
             v = verify(answer, refs)
             attempts = 1
-            while not v.passed and attempts <= max_revisions:
+            while answer and not v.passed and attempts <= max_revisions:
                 problems = "\n".join(f"- “{c.text}”：{c.message}" for c in v.problems[:10])
                 flags = "\n".join(f"- 合规：{f}" for f in v.compliance_flags)
-                messages += [{"role": "assistant", "content": answer},
+                messages += [resp.as_message(),
                              {"role": "user", "content": "核验器发现以下问题，请修改后重新作答（数字必须来自已获取的证据并标注编号，"
                                                          f"否则删除；不要再调用工具）：\n{problems}\n{flags}"}]
-                resp = self.llm.chat(messages)
+                resp = self.llm.chat(messages, tools=TOOLS, tool_choice="none")
                 meter.add(resp)
                 attempts += 1
                 new_answer = resp.content.strip()
                 new_v = verify(new_answer, refs)
-                if len(new_v.problems) + len(new_v.compliance_flags) <= len(v.problems) + len(v.compliance_flags):
+                if new_answer and (len(new_v.problems) + len(new_v.compliance_flags)
+                                   <= len(v.problems) + len(v.compliance_flags)):
                     answer, v = new_answer, new_v
             if v.problems:
                 warnings.append(f"仍有 {len(v.problems)} 个数字未通过核验，已在回答中标注")

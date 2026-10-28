@@ -77,6 +77,16 @@ def http(method, url, key, body=None, timeout=25):
         return {"status": None, "ms": int((time.time() - t0) * 1000), "error": redact("%s: %s" % (type(e).__name__, e))}
 
 
+def chat_body(model):
+    """与 finsight.llm.gateway.reasoning_params 保持一致：两家都是推理模型，思考内容计入 max_tokens。"""
+    body = {"model": model, "messages": [{"role": "user", "content": "只回复两个字：正常"}], "max_tokens": 2048}
+    if model.startswith("kimi-k3"):
+        body["reasoning_effort"] = "low"  # Kimi K3 系列始终思考，采样参数固定，不发送 temperature
+    elif model.startswith("deepseek"):
+        body.update({"thinking": {"type": "enabled"}, "reasoning_effort": "low", "temperature": 0.2})
+    return body
+
+
 def test_provider(name, bases, key, models):
     out = {"provider": name, "attempts": []}
     if not key:
@@ -97,12 +107,17 @@ def test_provider(name, bases, key, models):
         if isinstance(entry.get("available_models"), list):
             candidates = [m for m in models if m in entry["available_models"]] or candidates
         for model in candidates[:3]:
-            c = http("POST", base.rstrip("/") + "/chat/completions", key,
-                     {"model": model, "messages": [{"role": "user", "content": "只回复两个字：正常"}], "max_tokens": 10})
+            c = http("POST", base.rstrip("/") + "/chat/completions", key, chat_body(model), timeout=120)
             item = {"model": model, "status": c["status"], "ms": c["ms"]}
             if c["status"] == 200:
                 try:
-                    item["reply"] = json.loads(c["body"])["choices"][0]["message"]["content"]
+                    data = json.loads(c["body"])
+                    choice = data["choices"][0]
+                    msg = choice.get("message") or {}
+                    item["reply"] = msg.get("content") or ""
+                    item["finish_reason"] = choice.get("finish_reason")
+                    item["reasoning_chars"] = len(msg.get("reasoning_content") or "")
+                    item["usage"] = data.get("usage")
                 except Exception:
                     item["reply"] = "无法解析"
             else:
@@ -114,6 +129,12 @@ def test_provider(name, bases, key, models):
         if any(x["status"] == 200 for x in entry["chat"]):
             break
     return out
+
+
+def describe(c):
+    if c.get("status") != 200:
+        return "（%s）" % (c.get("error") or "")[:160]
+    return "「%s」finish=%s，思考 %s 字" % (c.get("reply") or "", c.get("finish_reason"), c.get("reasoning_chars", "?"))
 
 
 def main():
@@ -144,9 +165,9 @@ def main():
     env_info, values = read_env()
     report["env"] = env_info
     report["deepseek"] = test_provider("deepseek", ["https://api.deepseek.com"], values.get("DEEPSEEK_API_KEY", ""),
-                                       ["deepseek-flash", "deepseek-chat", "deepseek-v4-flash"])
+                                       ["deepseek-flash", "deepseek-v4-pro"])
     report["kimi"] = test_provider("kimi", ["https://api.moonshot.cn/v1", "https://api.moonshot.ai/v1"],
-                                   values.get("KIMI_API_KEY", ""), ["kimi-k3", "kimi-k2.6", "kimi-latest"])
+                                   values.get("KIMI_API_KEY", ""), ["kimi-k3.1-pro", "kimi-k3", "kimi-k2.6"])
     if not os.path.isdir(RUNS):
         os.makedirs(RUNS)
     path = os.path.join(RUNS, "diagnose.json")
@@ -167,8 +188,7 @@ def main():
             print("%s：%s" % (prov, r["skipped"]))
             continue
         for a in r["attempts"]:
-            chats = "；".join("%s→%s%s" % (c["model"], c["status"], ("「%s」" % c.get("reply")) if c.get("reply") else
-                                         ("（%s）" % (c.get("error") or "")[:120])) for c in a["chat"])
+            chats = "；".join("%s→%s%s" % (c["model"], c["status"], describe(c)) for c in a["chat"])
             print("%s @ %s：模型列表 HTTP %s；对话：%s" % (prov, a["base_url"], a["models_status"], chats))
     print("诊断结果已写入", path)
 

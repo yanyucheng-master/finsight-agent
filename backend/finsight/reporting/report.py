@@ -199,17 +199,23 @@ def generate_report(result: DiagnosisResult, *, llm: LLMClient | None = None, mo
             resp = llm.chat(messages)  # type: ignore[union-attr]
             meter.add(resp)
             text = resp.content.strip()
+            if not text:
+                raise LLMError("模型返回了空报告")
+            if resp.truncated:
+                warnings.append("模型输出达到长度上限，报告可能不完整")
             v = verify(text, ctx.refs)
             attempts, revised = 1, False
             while not v.passed and attempts <= max_revisions:
-                messages += [{"role": "assistant", "content": text}, {"role": "user", "content": _revision_prompt(v)}]
+                # 推理模型要求回传完整的 assistant 消息（含 reasoning_content）
+                messages += [resp.as_message(), {"role": "user", "content": _revision_prompt(v)}]
                 resp = llm.chat(messages)  # type: ignore[union-attr]
                 meter.add(resp)
                 attempts += 1
                 new_text = resp.content.strip()
                 new_v = verify(new_text, ctx.refs)
-                # 只有修订确实减少了问题才采用（防止越改越差）
-                if len(new_v.problems) + len(new_v.compliance_flags) <= len(v.problems) + len(v.compliance_flags):
+                # 只有修订确实减少了问题、且没有变成空文本才采用（防止越改越差）
+                if new_text and (len(new_v.problems) + len(new_v.compliance_flags)
+                                 <= len(v.problems) + len(v.compliance_flags)):
                     text, v, revised = new_text, new_v, True
             if v.problems:
                 warnings.append(f"仍有 {len(v.problems)} 个数字未通过核验，已在文中标注")

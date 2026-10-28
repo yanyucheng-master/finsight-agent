@@ -1,5 +1,5 @@
 @echo off
-rem 查找可用的 Python 3（供其他 .bat 调用，结果写入变量 PY）
+rem Find a usable Python 3 (called by other .bat files; result in variable PY)
 set "PY="
 for %%P in (
   "%USERPROFILE%\anaconda3\python.exe"
