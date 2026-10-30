@@ -141,7 +141,7 @@ export interface Claim {
   end: number;
   refs: string[];
   evidence_id?: string | null;
-  status: "verified" | "unattributed" | "mismatch" | "invalid_ref" | "unverified";
+  status: "verified" | "unattributed" | "mismatch" | "invalid_ref" | "unverified" | "benchmark";
   expected?: string | null;
   message: string;
   sentence: string;
@@ -155,9 +155,11 @@ export interface Verification {
   mismatch: number;
   invalid_ref: number;
   unverified: number;
+  benchmark?: number;
   verifiable_rate: number;
   citation_rate: number;
   compliance_flags: string[];
+  consistency_flags?: string[];
 }
 
 export interface Report {

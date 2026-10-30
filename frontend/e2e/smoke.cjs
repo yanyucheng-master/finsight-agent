@@ -24,8 +24,17 @@ require('fs').mkdirSync(OUT, { recursive: true });
   await page.keyboard.press('Escape');
   await page.click('text=研究简报');
   await page.click('text=模板简报（无需大模型）');
-  await page.waitForSelector('text=全部数字已通过核验', { timeout: 30000 });
+  await page.waitForSelector('text=抽取到的数字均已按引用核验', { timeout: 30000 });
   await page.screenshot({ path: OUT + '/4_brief.png', fullPage: true });
+  // 口径提示必须让核验条显示为“未通过”（用 2026-10-29 真实 Kimi 简报重新核验后的结果作为接口响应）
+  const fixture = require('fs').readFileSync(__dirname + '/fixture_report_consistency.json', 'utf-8');
+  await page.route('**/api/companies/*/report*', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: fixture }));
+  await page.click('text=模板简报（无需大模型）');
+  await page.waitForSelector('text=数字一致，但存在口径或合规提示', { timeout: 30000 });
+  await page.waitForSelector('text=口径提示');
+  await page.screenshot({ path: OUT + '/4b_brief_consistency.png', fullPage: true });
+  await page.unroute('**/api/companies/*/report*');
   await page.click('nav >> text=指标趋势');
   await page.waitForTimeout(800);
   await page.screenshot({ path: OUT + '/5_metrics.png' });

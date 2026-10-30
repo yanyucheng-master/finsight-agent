@@ -55,6 +55,7 @@ export const CLAIM_STATUS: Record<string, { label: string; cls: string }> = {
   mismatch: { label: "不一致", cls: "text-red-700 bg-red-50" },
   invalid_ref: { label: "引用无效", cls: "text-red-700 bg-red-50" },
   unverified: { label: "无证据", cls: "text-red-700 bg-red-50" },
+  benchmark: { label: "比较基准", cls: "text-slate-600 bg-slate-100" },
 };
 
 export const year = (end?: string | null) => (end ? end.slice(0, 4) : "");

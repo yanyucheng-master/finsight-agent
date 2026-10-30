@@ -27,7 +27,10 @@ from pydantic import BaseModel, Field
 from finsight.domain import Evidence, fmt_value
 from finsight.reporting.consistency import check_consistency
 
-ClaimStatus = Literal["verified", "unattributed", "mismatch", "invalid_ref", "unverified"]
+ClaimStatus = Literal["verified", "unattributed", "mismatch", "invalid_ref", "unverified", "benchmark"]
+
+# 数字前的比较措辞：“低于1倍”“超过 50%”中的数字是比较基准，不是公司数据
+COMPARE_RE = re.compile(r"(低于|高于|超过|不足|大于|小于|不到|不超过|不低于|逾|突破|跌破|接近|远低于|远高于)\s*$")
 
 CITE_RE = re.compile(r"[\[【]\s*(E\d+(?:\s*[,，、]\s*E\d+)*)\s*[\]】]")
 NUM_RE = re.compile(
@@ -74,6 +77,7 @@ class VerificationResult(BaseModel):
     mismatch: int
     invalid_ref: int
     unverified: int
+    benchmark: int = 0  # 比较基准数字（不计入问题，也不算“有证据”）
     verifiable_rate: float  # (verified + unattributed) / total
     citation_rate: float  # verified / total
     compliance_flags: list[str] = Field(default_factory=list)
@@ -174,7 +178,12 @@ def _sign_context(text: str, start: int) -> bool:
 def _attribute(display: float, num: str, unit: str | None, refs: dict[str, Evidence], sentence: str, *,
                signed: bool = False, negative_words: bool = False, plus: bool = False) -> Evidence | None:
     """为未标注引用的数字寻找唯一可信的证据归属：数值一致（不允许正负号翻转）且
-    证据名称出现在同一句中；否则仅在“有效数字较多且全局唯一”时归属，避免巧合匹配。"""
+    证据名称出现在同一句中；否则仅在“有效数字较多且全局唯一”时归属，避免巧合匹配。
+
+    至少 2 位有效数字才归属：“1倍”按显示精度可代表 0.5–1.5，2026-10-30 曾把“低于1倍”的 1 归到 0.55 倍的证据上。"""
+    digits = len(num.replace(",", "").replace(".", "").lstrip("0"))
+    if digits < 2:
+        return None
     hits = []
     for ev in refs.values():
         ok, note = _matches(display, num, unit, ev, signed=signed, negative_words=negative_words, plus=plus)
@@ -185,8 +194,13 @@ def _attribute(display: float, num: str, unit: str | None, refs: dict[str, Evide
     named = [ev for ev in hits if ev.label and ev.label.split("（")[0] in sentence]
     if named:
         return named[0]
-    digits = len(num.replace(",", "").replace(".", "").lstrip("0"))
     return hits[0] if len(hits) == 1 and digits >= 4 else None
+
+
+def _attribute_param(display: float, num: str, unit: str | None, params: dict[str, Evidence]) -> Evidence | None:
+    """比较措辞后的数字：在登记的阈值证据中找唯一一致的一个。"""
+    hits = [ev for ev in params.values() if _matches(display, num, unit, ev)[0]]
+    return hits[0] if len(hits) == 1 else None
 
 
 def _sentence_at(text: str, pos: int) -> str:
@@ -275,8 +289,23 @@ def verify(text: str, refs: dict[str, Evidence]) -> VerificationResult:
                     claim.message = (f"与 {ids[0]}（{first.label}）的数值 {claim.expected} 方向不一致：{sign_note}" if sign_note
                                      else f"与 {ids[0]}（{first.label}）的数值 {claim.expected} 不一致")
         else:
-            hit_ev = _attribute(display, num, unit, refs, claim.sentence, signed=signed, negative_words=neg_words,
-                                plus=plus)
+            # 比较基准：比较措辞之后的“整数或 .5”数字（低于1倍、超过50%）。非整数（低于1.18）仍按数据断言核验，
+            # 以免把编造的阈值当成基准放过。基准先尝试归属到登记过的阈值证据（p:），否则单列为 benchmark。
+            after_compare = bool(COMPARE_RE.search(mtext[max(0, m.start() - 6):m.start()]))
+            is_benchmark = after_compare and abs(display * 2 - round(display * 2)) < 1e-9
+            if after_compare:
+                params = {k: e for k, e in refs.items() if e.kind == "param"}
+                hit_ev = _attribute_param(display, num, unit, params)
+            else:
+                hit_ev = None
+            if hit_ev is None and not is_benchmark:
+                hit_ev = _attribute(display, num, unit, refs, claim.sentence, signed=signed,
+                                    negative_words=neg_words, plus=plus)
+            if hit_ev is None and is_benchmark:
+                claim.status = "benchmark"
+                claim.message = "比较基准（如“低于1倍”），不是来自证据的公司数据；如为系统阈值，应引用阈值证据"
+                claims.append(claim)
+                continue
             if hit_ev is not None:
                 claim.status, claim.evidence_id = "unattributed", hit_ev.id
                 claim.expected = fmt_value(hit_ev.value, hit_ev.unit)
@@ -286,9 +315,9 @@ def verify(text: str, refs: dict[str, Evidence]) -> VerificationResult:
         claims.append(claim)
 
     flags = [f"疑似投资建议用语：“{m.group(0)}”" for m in ADVICE_RE.finditer(text)]
-    total = len(claims)
     count = {s: sum(1 for c in claims if c.status == s)
-             for s in ("verified", "unattributed", "mismatch", "invalid_ref", "unverified")}
+             for s in ("verified", "unattributed", "mismatch", "invalid_ref", "unverified", "benchmark")}
+    total = len(claims) - count["benchmark"]  # 比较基准单列，不计入“数字断言”总数
     return VerificationResult(
         claims=claims, total=total, **count,
         verifiable_rate=((count["verified"] + count["unattributed"]) / total) if total else 1.0,

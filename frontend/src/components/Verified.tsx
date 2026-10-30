@@ -40,12 +40,20 @@ export function VerifiedMarkdown({ text, refs, code, local }: {
 
 export function VerificationBar({ v }: { v: Verification }) {
   const [open, setOpen] = useState(false);
-  const ok = v.mismatch + v.unverified + v.invalid_ref === 0 && v.compliance_flags.length === 0;
+  const consistency = v.consistency_flags ?? [];
+  const bench = v.benchmark ?? 0;
+  // 与后端 VerificationResult.passed 保持一致：数值问题、合规提示、口径提示任一存在都不算通过
+  const ok = v.mismatch + v.unverified + v.invalid_ref === 0 && v.compliance_flags.length === 0 && consistency.length === 0;
+  const headline = !ok
+    ? (v.mismatch + v.unverified + v.invalid_ref > 0 ? "⚠ 存在未通过核验的数字" : "⚠ 数字一致，但存在口径或合规提示")
+    : v.unattributed > 0
+      ? `✓ 数字均与证据一致（其中 ${v.unattributed} 个未标引用，归属为系统推断）`
+      : "✓ 抽取到的数字均已按引用核验";
   return (
     <div className={`rounded-xl border p-3 ${ok ? "border-emerald-200 bg-emerald-50/60" : "border-red-200 bg-red-50/60"}`}>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
         <span className={`font-semibold ${ok ? "text-emerald-700" : "text-red-700"}`}>
-          {ok ? "✓ 全部数字已通过核验" : "⚠ 存在未通过核验的数字"}
+          {headline}
         </span>
         <span className="text-slate-600">数字断言 <b>{v.total}</b></span>
         <span className="text-emerald-700">已核验 <b>{v.verified}</b></span>
@@ -53,6 +61,7 @@ export function VerificationBar({ v }: { v: Verification }) {
         {v.mismatch > 0 && <span className="text-red-700">不一致 <b>{v.mismatch}</b></span>}
         {v.unverified > 0 && <span className="text-red-700">无证据 <b>{v.unverified}</b></span>}
         {v.invalid_ref > 0 && <span className="text-red-700">引用无效 <b>{v.invalid_ref}</b></span>}
+        {bench > 0 && <span className="text-slate-600" title="如“低于1倍”中的 1：比较基准，不是公司数据，未核验来源">比较基准 <b>{bench}</b></span>}
         <span className="text-slate-600">可核验率 <b>{(v.verifiable_rate * 100).toFixed(1)}%</b></span>
         {v.total > 0 && (
           <button className="ml-auto text-xs text-brand-700 hover:underline" onClick={() => setOpen(!open)}>
@@ -61,6 +70,8 @@ export function VerificationBar({ v }: { v: Verification }) {
         )}
       </div>
       {v.compliance_flags.map((f) => <div key={f} className="mt-1 text-xs text-red-700">合规提示：{f}</div>)}
+      {consistency.map((f) => <div key={f} className="mt-1 text-xs text-amber-700">{f}</div>)}
+      <div className="mt-1 text-[11px] text-slate-500">核验只针对抽取到的数字与证据是否一致，不代表全文的推理、口径和时效都正确。</div>
       {open && (
         <table className="mt-3 w-full text-xs">
           <thead className="text-left text-slate-500">

@@ -95,3 +95,27 @@ def test_real_report_full_extraction_and_injected_error(live_600519):
     assert v.total >= 35 and v.passed, [(c.text, c.status, c.message) for c in v.problems]
     bad = verify(text.replace("毛利率为91.18%[E17]", "毛利率为99.99%[E17]"), refs)
     assert bad.mismatch == 1 and not bad.passed
+
+
+def test_comparison_benchmark_is_not_attributed_to_other_year():
+    """2026-10-30 万科问答：“低于1倍”中的 1 被归属到 2024 年现金短债比 0.55 倍。"""
+    refs = {"E3": Evidence(id=f"m:cash_to_st_debt@{P}", kind="metric", label="现金短债比", value=0.4123,
+                           unit="times", period=P),
+            "E39": Evidence(id="m:cash_to_st_debt@2024-12-31", kind="metric", label="现金短债比", value=0.5512,
+                            unit="times", period="2024-12-31")}
+    v = verify("现金短债比仅0.41倍[E3]，低于1倍，说明账面现金不足。", refs)
+    bench = [c for c in v.claims if c.text == "1倍"]
+    assert bench and bench[0].status == "benchmark" and bench[0].evidence_id is None
+    assert v.total == 1 and v.benchmark == 1 and v.passed
+
+
+def test_benchmark_matching_a_registered_threshold_is_attributed():
+    refs = {"E1": Evidence(id="p:cash_to_st_debt_low", kind="param", label="现金短债比预警阈值", value=1.0,
+                           unit="times")}
+    v = verify("现金短债比低于1.00倍。", refs)
+    assert [(c.status, c.evidence_id) for c in v.claims] == [("unattributed", "p:cash_to_st_debt_low")]
+
+
+def test_single_digit_uncited_numbers_are_never_attributed():
+    refs = {"E1": Evidence(id=f"m:x@{P}", kind="metric", label="净现比", value=0.55, unit="times", period=P)}
+    assert verify("净现比约1倍。", refs).claims[0].status == "unverified"
