@@ -54,6 +54,6 @@ ruff check finsight tests
 - `_python.bat` 在用户本机实际找到的是 Python 3.14（`AppData\Local\Programs\Python\Python314`，标准 Anaconda 路径下没有）；`_deps.bat` 首次运行时用它在项目内创建 `.venv` 并安装依赖，之后各脚本优先使用 `.venv`（不改动全局 Python）。电脑操作权限**不能控制终端类应用**，需要运行命令时请用户双击 `.bat`。
 - 两家大模型都是推理模型，网关已适配（见 `config.LLM_PROVIDERS` 注释）：改动请求参数前先查官方文档，并在 `tests/test_gateway.py` 里补测试。
 - LLM：测试用 DeepSeek，参赛用 Kimi（用户决定）。Key 由用户运行 `scripts\setup_env.bat` 写入本机 `.env`（远程工具禁止写 .env），禁止提交到仓库。
-- 真实模型测试：用户运行 `scripts\llm_smoke.bat`（默认 Kimi、费用上限 3 元，`LLM_BUDGET_CNY`），结果写入 `data\runs\`，再 stage 回容器复核。三轮 Kimi 实测结果在 `docs/eval/live-20261029/`、`live-20261030/`、`live-20261030-r3/`。用户授权的累计测试费用上限 10 元已基本用完（保守预留约 8.2 元），**再做付费测试前必须先征得用户同意**。
+- 真实模型测试：用户运行 `scripts\llm_smoke.bat`（默认 Kimi、费用上限 3 元，`LLM_BUDGET_CNY`），结果写入 `data\runs\`，再 stage 回容器复核。三轮 Kimi 实测结果在 `docs/eval/live-20261029/`、`live-20261030/`、`live-20261030-r3/`。用户授权的累计测试费用上限：10 元已基本用完（保守预留约 8.2 元，控制台实际约 4 元）；**2026-10-30 用户将总授权上限提高到 20 元**（含此前已花费），用于评测②（有 / 无核验的数字错误率）和最终演示彩排。超出 20 元、或做上述范围之外的付费测试前，必须先征得用户同意；每次实际花费都要记到对应 `ledger.json`。
 - **核验器改动必须同时跑真实输出回归**（`tests/test_verifier_regressions.py`）、组合矩阵（`tests/test_verifier_matrix.py`）和两种排版的注入评测；只用模板文本测会漏掉真实写法（2026-10-30 的教训：数字紧贴汉字时整段漏检）。
 - 参赛赛题：主题赛 2「AI+金融赋能应用赛」（见 docs/COMPETITION.md）。
