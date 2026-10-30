@@ -6,13 +6,13 @@ rem Plain push only: never forces. If the remote already has other history it wi
 cd /d "%~dp0.."
 set "URL=https://github.com/yanyucheng-master/finsight-agent.git"
 set "BUNDLE=%CD%\.repo\finsight-agent.bundle"
-set "WORK=%TEMP%\finsight-push"
+set "WORK=%TEMP%\finsight-push-%RANDOM%-%RANDOM%"
 
 where git >nul 2>nul
 if errorlevel 1 ( echo [ERROR] git not found. Install Git for Windows first: https://git-scm.com/download/win & pause & exit /b 1 )
 if not exist "%BUNDLE%" ( echo [ERROR] Bundle not found: %BUNDLE% & pause & exit /b 1 )
 
-if exist "%WORK%" rmdir /s /q "%WORK%"
+if exist "%WORK%" ( echo [ERROR] Temporary path already exists. Please retry. & pause & exit /b 1 )
 git clone "%BUNDLE%" "%WORK%"
 if errorlevel 1 ( echo [ERROR] Cannot read the bundle. & pause & exit /b 1 )
 cd /d "%WORK%"
