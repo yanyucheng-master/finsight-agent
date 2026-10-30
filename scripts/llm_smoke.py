@@ -47,10 +47,12 @@ class Tee:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--provider", default="deepseek")
-    ap.add_argument("--budget", type=float, default=5.0, help="本次运行的费用上限（元，客户端估算），0 表示不限")
+    ap.add_argument("--provider", default="kimi")
+    ap.add_argument("--budget", type=float, default=3.0, help="本次运行的费用上限（元，客户端估算），0 表示不限")
     args = ap.parse_args()
     os.environ["LLM_BUDGET_CNY"] = str(args.budget)
+    # 冒烟测试把单次输出上限降到 8192（实测一份简报含思考约 3–5 千 token），使逐请求预留更贴近实际
+    os.environ.setdefault("LLM_MAX_TOKENS", "8192")
     RUNS.mkdir(parents=True, exist_ok=True)
     log = open(RUNS / "smoke_console.log", "w", encoding="utf-8")
     sys.stdout = Tee(sys.__stdout__, log)

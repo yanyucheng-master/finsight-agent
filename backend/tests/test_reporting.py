@@ -31,7 +31,7 @@ def test_all_supported_numbers_verify():
             "存货周转天数 1,418.7 天[E4]。营业收入下降 1.21%[E5]。")
     v = verify(text, REFS)
     assert v.total == 5 and v.verified == 5, [(c.text, c.status, c.message) for c in v.claims]
-    assert any("正负号" in c.message for c in v.claims)  # “下降 1.21%” 对应负增速
+    assert any("负号" in c.message for c in v.claims)  # “下降 1.21%” 对应负增速
 
 
 def test_detects_mismatch_unverified_invalid_and_unattributed():
@@ -132,6 +132,9 @@ def test_verifier_benchmark_detects_injected_errors():
     assert s["overall_detection_rate"] >= 0.99
     assert s["false_positive_rate"] == 0.0
     assert s["controls"]["rounding_ok"]["rate"] >= 0.99
+    # 数字紧贴汉字时也必须全部抽取（2026-10-30 真实测试暴露的缺口）
+    assert s["layouts"]["compact"]["claims"] == s["layouts"]["spaced"]["claims"]
+    assert s["detection"]["sign_flip"]["rate"] >= 0.99
 
 
 def test_report_revision_passes_back_reasoning(diag):

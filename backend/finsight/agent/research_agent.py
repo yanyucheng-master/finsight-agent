@@ -326,7 +326,9 @@ class ResearchAgent:
             v = verify("", refs)
             attempts = 0
             warnings.append(str(exc))
-        return AgentAnswer(question=question, answer=answer, annotated_answer=annotate(answer, v),
+        note = f"\n\n> 数据时效（系统生成）：{data_asof(self.r)}" + ("；同业数据取自各自公司的快照。" if any(
+            st.tool == "compare_peers" for st in steps) else "。") if answer and attempts else ""
+        return AgentAnswer(question=question, answer=answer + note, annotated_answer=annotate(answer, v) + note,
                            refs={r: e.id for r, e in refs.items()}, evidence={e.id: e for e in refs.values()},
                            verification=v, steps=steps, attempts=attempts, model=getattr(self.llm, "model", None),
                            usage=meter.as_dict(), warnings=warnings, elapsed_ms=int((time.monotonic() - started) * 1000))

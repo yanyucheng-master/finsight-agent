@@ -47,6 +47,7 @@ class Report(BaseModel):
     warnings: list[str] = Field(default_factory=list)
     generated_at: str
     elapsed_ms: int = 0
+    data_asof: str = ""  # 系统生成的数据时效说明（同时追加在正文末尾，不依赖模型是否写出）
 
 
 # ------------------------------------------------------------------ 上下文
@@ -143,7 +144,7 @@ def template_report(result: DiagnosisResult, ctx: ReportContext) -> str:
     out += todo or ["- 跟踪下一期定期报告，确认各项指标趋势是否延续。"]
     out.append("\n## 数据与方法说明")
     out.append("本简报由 FinSight 确定性引擎生成：数据取自公开披露渠道的原始快照，指标与模型按公开公式计算，"
-               f"每个数字均可通过引用编号溯源；{data_asof(result)}。模型结论为排查线索，不构成投资建议。")
+               "每个数字均可通过引用编号溯源。模型结论为排查线索，不构成投资建议。")
     return "\n".join(out)
 
 
@@ -180,14 +181,29 @@ def _issues(v: VerificationResult) -> int:
 
 
 def data_asof(result: DiagnosisResult) -> str:
-    """数据时效说明：最新报告期、公告日、快照采集时间（取自证据的 SourceRef）。"""
+    """数据时效说明（确定性生成）：最新报告期、该期财务数据的公告日、全部快照的采集日期范围。
+
+    多个数据集的日期可能不同，因此给出范围而不是任取一条。"""
     if not result.periods:
         return "数据时效未知"
     end = result.periods[0].end
-    src = next((e.source for e in result.evidence.values() if e.source and e.period == end), None)
-    notice = f"，公告日 {src.notice_date}" if src and src.notice_date else ""
-    fetched = f"，快照采集于 {src.fetched_at[:10]}" if src and src.fetched_at else ""
-    return f"数据截至 {end} 年报{notice}{fetched}，不代表此后的最新状况"
+    sources = [e.source for e in result.evidence.values() if e.source]
+    notices = sorted({s.notice_date[:10] for s in sources if s.notice_date and s.report_date == end})
+    fetched = sorted({s.fetched_at[:10] for s in sources if s.fetched_at})
+
+    def span(xs: list[str]) -> str:
+        return xs[0] if len(xs) == 1 else f"{xs[0]} 至 {xs[-1]}"
+
+    parts = [f"数据截至 {end} 年报"]
+    if notices:
+        parts.append(f"该期财务数据公告日 {span(notices)}")
+    if fetched:
+        parts.append(f"快照采集于 {span(fetched)}")
+    return "，".join(parts) + "，不代表此后的最新状况"
+
+
+def _asof_note(result: DiagnosisResult) -> str:
+    return f"\n\n> 数据时效（系统生成）：{data_asof(result)}。"
 
 
 def _revision_prompt(v: VerificationResult) -> str:
@@ -246,8 +262,10 @@ def generate_report(result: DiagnosisResult, *, llm: LLMClient | None = None, mo
             if v.problems:
                 warnings.append(f"仍有 {len(v.problems)} 个数字未通过核验，已在文中标注")
             warnings += v.consistency_flags
+            note = _asof_note(result)
             return Report(code=result.profile.code, name=result.profile.name, mode="llm",
-                          model=getattr(llm, "model", None), markdown=text, annotated_markdown=annotate(text, v),
+                          model=getattr(llm, "model", None), markdown=text + note,
+                          annotated_markdown=annotate(text, v) + note, data_asof=data_asof(result),
                           refs=refs_public, verification=v, attempts=attempts, revised=revised,
                           usage=meter.as_dict(), warnings=warnings, generated_at=now,
                           elapsed_ms=int((time.monotonic() - started) * 1000))
@@ -256,6 +274,7 @@ def generate_report(result: DiagnosisResult, *, llm: LLMClient | None = None, mo
 
     text = template_report(result, ctx)
     v = verify(text, ctx.refs)
-    return Report(code=result.profile.code, name=result.profile.name, mode="template", markdown=text,
-                  annotated_markdown=annotate(text, v), refs=refs_public, verification=v, warnings=warnings,
+    note = _asof_note(result)
+    return Report(code=result.profile.code, name=result.profile.name, mode="template", markdown=text + note,
+                  annotated_markdown=annotate(text, v) + note, data_asof=data_asof(result), refs=refs_public, verification=v, warnings=warnings,
                   generated_at=now, elapsed_ms=int((time.monotonic() - started) * 1000))

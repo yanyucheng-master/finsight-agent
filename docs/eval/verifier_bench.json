@@ -47,64 +47,196 @@
    "claims": 12
   }
  ],
+ "layouts": {
+  "spaced": {
+   "claims": 130,
+   "detection": {
+    "perturb_1pct": {
+     "cases": 122,
+     "detected": 122,
+     "rate": 1.0,
+     "misses": []
+    },
+    "perturb_5pct": {
+     "cases": 125,
+     "detected": 125,
+     "rate": 1.0,
+     "misses": []
+    },
+    "perturb_20pct": {
+     "cases": 129,
+     "detected": 129,
+     "rate": 1.0,
+     "misses": []
+    },
+    "shift_decimal": {
+     "cases": 129,
+     "detected": 129,
+     "rate": 1.0,
+     "misses": []
+    },
+    "unit_swap": {
+     "cases": 34,
+     "detected": 34,
+     "rate": 1.0,
+     "misses": []
+    },
+    "wrong_ref": {
+     "cases": 130,
+     "detected": 130,
+     "rate": 1.0,
+     "misses": []
+    },
+    "fabricate_uncited": {
+     "cases": 130,
+     "detected": 130,
+     "rate": 1.0,
+     "misses": []
+    },
+    "sign_flip": {
+     "cases": 129,
+     "detected": 129,
+     "rate": 1.0,
+     "misses": []
+    }
+   },
+   "controls": {
+    "unchanged": {
+     "cases": 130,
+     "passed": 130,
+     "rate": 1.0,
+     "failures": []
+    },
+    "rounding_ok": {
+     "cases": 127,
+     "passed": 127,
+     "rate": 1.0,
+     "failures": []
+    }
+   }
+  },
+  "compact": {
+   "claims": 130,
+   "detection": {
+    "perturb_1pct": {
+     "cases": 122,
+     "detected": 122,
+     "rate": 1.0,
+     "misses": []
+    },
+    "perturb_5pct": {
+     "cases": 125,
+     "detected": 125,
+     "rate": 1.0,
+     "misses": []
+    },
+    "perturb_20pct": {
+     "cases": 129,
+     "detected": 129,
+     "rate": 1.0,
+     "misses": []
+    },
+    "shift_decimal": {
+     "cases": 129,
+     "detected": 129,
+     "rate": 1.0,
+     "misses": []
+    },
+    "unit_swap": {
+     "cases": 34,
+     "detected": 34,
+     "rate": 1.0,
+     "misses": []
+    },
+    "wrong_ref": {
+     "cases": 130,
+     "detected": 130,
+     "rate": 1.0,
+     "misses": []
+    },
+    "fabricate_uncited": {
+     "cases": 130,
+     "detected": 130,
+     "rate": 1.0,
+     "misses": []
+    },
+    "sign_flip": {
+     "cases": 129,
+     "detected": 129,
+     "rate": 1.0,
+     "misses": []
+    }
+   },
+   "controls": {
+    "unchanged": {
+     "cases": 130,
+     "passed": 130,
+     "rate": 1.0,
+     "failures": []
+    },
+    "rounding_ok": {
+     "cases": 127,
+     "passed": 127,
+     "rate": 1.0,
+     "failures": []
+    }
+   }
+  }
+ },
+ "overall_detection_rate": 1.0,
+ "false_positive_rate": 0.0,
  "detection": {
   "perturb_1pct": {
-   "cases": 122,
-   "detected": 122,
-   "rate": 1.0,
-   "misses": []
+   "cases": 244,
+   "detected": 244,
+   "rate": 1.0
   },
   "perturb_5pct": {
-   "cases": 125,
-   "detected": 125,
-   "rate": 1.0,
-   "misses": []
+   "cases": 250,
+   "detected": 250,
+   "rate": 1.0
   },
   "perturb_20pct": {
-   "cases": 129,
-   "detected": 129,
-   "rate": 1.0,
-   "misses": []
+   "cases": 258,
+   "detected": 258,
+   "rate": 1.0
   },
   "shift_decimal": {
-   "cases": 129,
-   "detected": 129,
-   "rate": 1.0,
-   "misses": []
+   "cases": 258,
+   "detected": 258,
+   "rate": 1.0
   },
   "unit_swap": {
-   "cases": 34,
-   "detected": 34,
-   "rate": 1.0,
-   "misses": []
+   "cases": 68,
+   "detected": 68,
+   "rate": 1.0
   },
   "wrong_ref": {
-   "cases": 130,
-   "detected": 130,
-   "rate": 1.0,
-   "misses": []
+   "cases": 260,
+   "detected": 260,
+   "rate": 1.0
   },
   "fabricate_uncited": {
-   "cases": 130,
-   "detected": 130,
-   "rate": 1.0,
-   "misses": []
+   "cases": 260,
+   "detected": 260,
+   "rate": 1.0
+  },
+  "sign_flip": {
+   "cases": 258,
+   "detected": 258,
+   "rate": 1.0
   }
  },
  "controls": {
   "unchanged": {
-   "cases": 130,
-   "passed": 130,
-   "rate": 1.0,
-   "failures": []
+   "cases": 260,
+   "passed": 260,
+   "rate": 1.0
   },
   "rounding_ok": {
-   "cases": 127,
-   "passed": 127,
-   "rate": 1.0,
-   "failures": []
+   "cases": 254,
+   "passed": 254,
+   "rate": 1.0
   }
- },
- "overall_detection_rate": 1.0,
- "false_positive_rate": 0.0
+ }
 }

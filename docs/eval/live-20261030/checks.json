@@ -1,0 +1,46 @@
+{
+  "model": "kimi-k3.1-pro",
+  "served_model": "kimi-k3.1-pro",
+  "reply": "正常",
+  "finish_reason": "stop",
+  "usage": {
+    "prompt_tokens": 91,
+    "completion_tokens": 29,
+    "total_tokens": 120,
+    "reasoning_tokens": 13,
+    "cache_write_tokens": 0
+  },
+  "tool_roundtrip": {
+    "passed": true,
+    "tool_calls": [
+      {
+        "name": "lookup_metric",
+        "arguments": {
+          "code": "600519",
+          "metric": "gross_margin"
+        }
+      }
+    ],
+    "first_finish_reason": "tool_calls",
+    "first_reasoning_chars": 65,
+    "final_reply": "600519 的 gross_margin 最新取值（2025 年）为 91.18%。",
+    "final_finish_reason": "stop",
+    "usage": [
+      {
+        "prompt_tokens": 211,
+        "completion_tokens": 97,
+        "total_tokens": 308,
+        "reasoning_tokens": 28,
+        "cache_write_tokens": 0
+      },
+      {
+        "prompt_tokens": 359,
+        "completion_tokens": 57,
+        "total_tokens": 416,
+        "reasoning_tokens": 21,
+        "cache_write_tokens": 256
+      }
+    ],
+    "latency_ms": 7043
+  }
+}

@@ -31,7 +31,9 @@ ClaimStatus = Literal["verified", "unattributed", "mismatch", "invalid_ref", "un
 
 CITE_RE = re.compile(r"[\[【]\s*(E\d+(?:\s*[,，、]\s*E\d+)*)\s*[\]】]")
 NUM_RE = re.compile(
-    r"(?<![\w.])(?P<sign>[-−+]?)(?P<num>\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)\s*"
+    # 左边界只排除“数字、ASCII 字母、小数点、千分位逗号”。不能用 \w：Python 里汉字也属于 \w，
+    # 会导致“毛利率为91.18%”这类紧贴汉字的数字整个漏检、“为1,032.80”被截成“032.80”（2026-10-30 真实测试发现）。
+    r"(?<![0-9A-Za-z.,])(?P<sign>[-−+]?)(?P<num>\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)\s*"
     r"(?P<unit>亿元|万元|元/股|元|个百分点|百分点|pp|%|％|倍|天|x|X)?"
 )
 # 不视为断言数字的上下文
@@ -41,6 +43,9 @@ SKIP_AFTER = re.compile(r"^\s*(年|月|日|季度|季|月份|期|家|条|项|个
 FORMAT_COUNT = re.compile(r"^\s*(?:[–—\-~～至到]\s*\d+\s*)?(句|段|点|字|行|条|项|节)")
 DATE_RE = re.compile(r"\d{4}[-/.]\d{1,2}[-/.]\d{1,2}")
 ADVICE_RE = re.compile(r"(建议|推荐|可以|应当|宜)\s*(买入|卖出|增持|减持|持有|抄底|加仓|减仓)|目标价|买入评级|卖出评级")
+
+# 表示“变化方向为负”的措辞（只看数字前、同一分句内）。“降至 / 减至”描述的是水平，不算。
+NEG_WORDS = re.compile(r"(下降|下滑|减少|下跌|回落|收缩|缩减|萎缩)(?!至|到)|亏损|净流出|流出|为负|负增长|减亏")
 
 UNIT_SCALE = {"亿元": 1e8, "万元": 1e4, "元": 1.0, "元/股": 1.0}
 
@@ -133,7 +138,12 @@ def _candidates(display: float, num: str, unit: str | None, ev_unit: str) -> lis
     return out
 
 
-def _matches(display: float, num: str, unit: str | None, ev: Evidence) -> tuple[bool, str]:
+def _matches(display: float, num: str, unit: str | None, ev: Evidence, *, signed: bool = False,
+             negative_words: bool = False) -> tuple[bool, str]:
+    """数值比对。正负号规则：
+    * 文本带显式正负号（+12.30% / -1.21%）：必须与证据符号一致；
+    * 文本不带符号、证据为负：只有数字前（同一分句）有“下降 / 亏损 / 流出”等负向措辞才算一致；
+    * 文本不带符号、证据为正，但前面写了负向措辞：方向相反，判不一致。"""
     if isinstance(ev.value, bool) or ev.value is None:
         return False, ""
     if isinstance(ev.value, str):
@@ -142,18 +152,28 @@ def _matches(display: float, num: str, unit: str | None, ev: Evidence) -> tuple[
     target = float(ev.value)
     for cand in _candidates(display, num, unit, ev.unit):
         if math.isclose(cand.value, target, abs_tol=cand.tol, rel_tol=1e-9):
+            if not signed and negative_words and target > cand.tol:
+                return False, "措辞表示下降 / 亏损，但证据为正值"
             return True, ""
-        if math.isclose(abs(cand.value), abs(target), abs_tol=cand.tol, rel_tol=1e-9) and target != 0:
-            return True, "数值一致，正负号以文字表述（如“下降”）"
+        if (not signed and negative_words and target < 0
+                and math.isclose(abs(cand.value), abs(target), abs_tol=cand.tol, rel_tol=1e-9)):
+            return True, "数值一致，负号以文字表述（如“下降”）"
     return False, ""
 
 
-def _attribute(display: float, num: str, unit: str | None, refs: dict[str, Evidence], sentence: str) -> Evidence | None:
+def _sign_context(text: str, start: int) -> bool:
+    """数字前、同一分句内（向前最多 10 个字）是否有负向措辞。"""
+    left = max(text.rfind(ch, 0, start) for ch in "，,、。；;：:\n（(") + 1
+    return bool(NEG_WORDS.search(text[max(left, start - 10):start]))
+
+
+def _attribute(display: float, num: str, unit: str | None, refs: dict[str, Evidence], sentence: str, *,
+               signed: bool = False, negative_words: bool = False) -> Evidence | None:
     """为未标注引用的数字寻找唯一可信的证据归属：数值一致（不允许正负号翻转）且
     证据名称出现在同一句中；否则仅在“有效数字较多且全局唯一”时归属，避免巧合匹配。"""
     hits = []
     for ev in refs.values():
-        ok, note = _matches(display, num, unit, ev)
+        ok, note = _matches(display, num, unit, ev, signed=signed, negative_words=negative_words)
         if ok and not note:
             hits.append(ev)
     if not hits:
@@ -209,6 +229,8 @@ def verify(text: str, refs: dict[str, Evidence]) -> VerificationResult:
         if not unit and "." not in raw and float(raw) < 10 and re.search(r"(第|前|近|共|约)\s*$", mtext[max(0, m.start() - 3):m.start()]):
             continue
         sign = -1.0 if m.group("sign") in ("-", "−") else 1.0
+        signed = bool(m.group("sign"))
+        neg_words = _sign_context(mtext, m.start())
         display = sign * float(raw)
         # 2) 关联引用：数字之后、下一个数字之前（同一句内）的第一个引用组
         next_start = numbers[idx + 1].start() if idx + 1 < len(numbers) else len(text)
@@ -226,11 +248,14 @@ def verify(text: str, refs: dict[str, Evidence]) -> VerificationResult:
                 claim.message = f"引用编号 {'、'.join(missing)} 不在证据清单中"
             else:
                 hit = None
+                sign_note = ""
                 for i in ids:
                     ev = refs.get(i)
                     if ev is None:
                         continue
-                    ok, note = _matches(display, num, unit, ev)
+                    ok, note = _matches(display, num, unit, ev, signed=signed, negative_words=neg_words)
+                    if not ok and note:
+                        sign_note = note
                     if ok:
                         hit = (i, ev, note)
                         break
@@ -242,9 +267,10 @@ def verify(text: str, refs: dict[str, Evidence]) -> VerificationResult:
                     first = refs[next(i for i in ids if i in refs)]
                     claim.status, claim.evidence_id = "mismatch", first.id
                     claim.expected = fmt_value(first.value, first.unit)
-                    claim.message = f"与 {ids[0]}（{first.label}）的数值 {claim.expected} 不一致"
+                    claim.message = (f"与 {ids[0]}（{first.label}）的数值 {claim.expected} 方向不一致：{sign_note}" if sign_note
+                                     else f"与 {ids[0]}（{first.label}）的数值 {claim.expected} 不一致")
         else:
-            hit_ev = _attribute(display, num, unit, refs, claim.sentence)
+            hit_ev = _attribute(display, num, unit, refs, claim.sentence, signed=signed, negative_words=neg_words)
             if hit_ev is not None:
                 claim.status, claim.evidence_id = "unattributed", hit_ev.id
                 claim.expected = fmt_value(hit_ev.value, hit_ev.unit)

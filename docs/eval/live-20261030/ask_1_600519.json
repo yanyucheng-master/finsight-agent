@@ -1,0 +1,364 @@
+{
+  "question": "茅台近三年的利润现金含量如何？和五粮液、泸州老窖相比毛利率怎么样？",
+  "answer": "**结论：**茅台近三年利润现金含量有所波动，2024年现金覆盖较好，但2025年明显减弱；毛利率则始终保持在高位，并显著高于五粮液和泸州老窖。\n\n### 利润现金含量\n以**净现比（经营活动现金流量净额 ÷ 净利润）**衡量：\n\n| 年度 | 净现比 |\n|---|---:|\n| 2023年 | 0.86倍[E3] |\n| 2024年 | 1.04倍[E2] |\n| 2025年 | 0.72倍[E1] |\n\n2024年经营现金流基本覆盖净利润；2025年净现比低于1倍，表明当年利润的现金保障程度偏弱[E1]。\n\n### 毛利率对比\n茅台毛利率从2023年的91.96%[E6]、2024年的91.93%[E5]变为2025年的91.18%[E4]，总体保持高位，2025年略有回落。\n\n2025年横向比较：\n\n- **贵州茅台：91.18%**[E7]\n- **五粮液：77.54%**[E8]\n- **泸州老窖：86.62%**[E9]\n\n因此，茅台毛利率在三家公司中最高。以上依据截至2025年年报，不代表此后的最新状况。",
+  "annotated_answer": "**结论：**茅台近三年利润现金含量有所波动，2024年现金覆盖较好，但2025年明显减弱；毛利率则始终保持在高位，并显著高于五粮液和泸州老窖。\n\n### 利润现金含量\n以**净现比（经营活动现金流量净额 ÷ 净利润）**衡量：\n\n| 年度 | 净现比 |\n|---|---:|\n| 2023年 | 0.86倍[E3] |\n| 2024年 | 1.04倍[E2] |\n| 2025年 | 0.72倍[E1] |\n\n2024年经营现金流基本覆盖净利润；2025年净现比低于1倍，表明当年利润的现金保障程度偏弱[E1]。\n\n### 毛利率对比\n茅台毛利率从2023年的91.96%[E6]、2024年的91.93%[E5]变为2025年的91.18%[E4]，总体保持高位，2025年略有回落。\n\n2025年横向比较：\n\n- **贵州茅台：91.18%**[E7]\n- **五粮液：77.54%**[E8]\n- **泸州老窖：86.62%**[E9]\n\n因此，茅台毛利率在三家公司中最高。以上依据截至2025年年报，不代表此后的最新状况。",
+  "refs": {
+    "E1": "m:ocf_to_np@2025-12-31",
+    "E2": "m:ocf_to_np@2024-12-31",
+    "E3": "m:ocf_to_np@2023-12-31",
+    "E4": "m:gross_margin@2025-12-31",
+    "E5": "m:gross_margin@2024-12-31",
+    "E6": "m:gross_margin@2023-12-31",
+    "E7": "600519|m:gross_margin@2025-12-31",
+    "E8": "000858|m:gross_margin@2025-12-31",
+    "E9": "000568|m:gross_margin@2025-12-31"
+  },
+  "evidence": {
+    "m:ocf_to_np@2025-12-31": {
+      "id": "m:ocf_to_np@2025-12-31",
+      "kind": "metric",
+      "label": "净现比",
+      "value": 0.7211577861097138,
+      "unit": "times",
+      "period": "2025-12-31",
+      "formula": "经营活动现金流量净额 ÷ 净利润",
+      "expression": "经营活动产生的现金流量净额（2025）=615.22 亿元；净利润（2025）=853.10 亿元",
+      "inputs": [
+        "f:cf.ocf@2025-12-31",
+        "f:is.net_profit@2025-12-31"
+      ],
+      "source": null,
+      "note": null,
+      "status": "ok"
+    },
+    "m:ocf_to_np@2024-12-31": {
+      "id": "m:ocf_to_np@2024-12-31",
+      "kind": "metric",
+      "label": "净现比",
+      "value": 1.0350251711923593,
+      "unit": "times",
+      "period": "2024-12-31",
+      "formula": "经营活动现金流量净额 ÷ 净利润",
+      "expression": "经营活动产生的现金流量净额（2024）=924.64 亿元；净利润（2024）=893.35 亿元",
+      "inputs": [
+        "f:cf.ocf@2024-12-31",
+        "f:is.net_profit@2024-12-31"
+      ],
+      "source": null,
+      "note": null,
+      "status": "ok"
+    },
+    "m:ocf_to_np@2023-12-31": {
+      "id": "m:ocf_to_np@2023-12-31",
+      "kind": "metric",
+      "label": "净现比",
+      "value": 0.8590296640178982,
+      "unit": "times",
+      "period": "2023-12-31",
+      "formula": "经营活动现金流量净额 ÷ 净利润",
+      "expression": "经营活动产生的现金流量净额（2023）=665.93 亿元；净利润（2023）=775.21 亿元",
+      "inputs": [
+        "f:cf.ocf@2023-12-31",
+        "f:is.net_profit@2023-12-31"
+      ],
+      "source": null,
+      "note": null,
+      "status": "ok"
+    },
+    "m:gross_margin@2025-12-31": {
+      "id": "m:gross_margin@2025-12-31",
+      "kind": "metric",
+      "label": "毛利率",
+      "value": 0.9117955168348006,
+      "unit": "ratio",
+      "period": "2025-12-31",
+      "formula": "(营业收入 − 营业成本) ÷ 营业收入",
+      "expression": "营业成本（2025）=148.92 亿元；营业收入（2025）=1,688.38 亿元",
+      "inputs": [
+        "f:is.cogs@2025-12-31",
+        "f:is.revenue@2025-12-31"
+      ],
+      "source": null,
+      "note": null,
+      "status": "ok"
+    },
+    "m:gross_margin@2024-12-31": {
+      "id": "m:gross_margin@2024-12-31",
+      "kind": "metric",
+      "label": "毛利率",
+      "value": 0.9193121663606456,
+      "unit": "ratio",
+      "period": "2024-12-31",
+      "formula": "(营业收入 − 营业成本) ÷ 营业收入",
+      "expression": "营业成本（2024）=137.89 亿元；营业收入（2024）=1,708.99 亿元",
+      "inputs": [
+        "f:is.cogs@2024-12-31",
+        "f:is.revenue@2024-12-31"
+      ],
+      "source": null,
+      "note": null,
+      "status": "ok"
+    },
+    "m:gross_margin@2023-12-31": {
+      "id": "m:gross_margin@2023-12-31",
+      "kind": "metric",
+      "label": "毛利率",
+      "value": 0.9196493724135798,
+      "unit": "ratio",
+      "period": "2023-12-31",
+      "formula": "(营业收入 − 营业成本) ÷ 营业收入",
+      "expression": "营业成本（2023）=118.67 亿元；营业收入（2023）=1,476.94 亿元",
+      "inputs": [
+        "f:is.cogs@2023-12-31",
+        "f:is.revenue@2023-12-31"
+      ],
+      "source": null,
+      "note": null,
+      "status": "ok"
+    },
+    "600519|m:gross_margin@2025-12-31": {
+      "id": "600519|m:gross_margin@2025-12-31",
+      "kind": "metric",
+      "label": "贵州茅台毛利率",
+      "value": 0.9117955168348006,
+      "unit": "ratio",
+      "period": "2025-12-31",
+      "formula": "(营业收入 − 营业成本) ÷ 营业收入",
+      "expression": "营业成本（2025）=148.92 亿元；营业收入（2025）=1,688.38 亿元",
+      "inputs": [
+        "f:is.cogs@2025-12-31",
+        "f:is.revenue@2025-12-31"
+      ],
+      "source": null,
+      "note": null,
+      "status": "ok"
+    },
+    "000858|m:gross_margin@2025-12-31": {
+      "id": "000858|m:gross_margin@2025-12-31",
+      "kind": "metric",
+      "label": "五粮液毛利率",
+      "value": 0.7754184152047013,
+      "unit": "ratio",
+      "period": "2025-12-31",
+      "formula": "(营业收入 − 营业成本) ÷ 营业收入",
+      "expression": "营业成本（2025）=91.02 亿元；营业收入（2025）=405.29 亿元",
+      "inputs": [
+        "f:is.cogs@2025-12-31",
+        "f:is.revenue@2025-12-31"
+      ],
+      "source": null,
+      "note": null,
+      "status": "ok"
+    },
+    "000568|m:gross_margin@2025-12-31": {
+      "id": "000568|m:gross_margin@2025-12-31",
+      "kind": "metric",
+      "label": "泸州老窖毛利率",
+      "value": 0.8662411815119095,
+      "unit": "ratio",
+      "period": "2025-12-31",
+      "formula": "(营业收入 − 营业成本) ÷ 营业收入",
+      "expression": "营业成本（2025）=34.42 亿元；营业收入（2025）=257.31 亿元",
+      "inputs": [
+        "f:is.cogs@2025-12-31",
+        "f:is.revenue@2025-12-31"
+      ],
+      "source": null,
+      "note": null,
+      "status": "ok"
+    }
+  },
+  "verification": {
+    "claims": [
+      {
+        "text": "0.86倍",
+        "start": 150,
+        "end": 155,
+        "value": 0.86,
+        "unit": "倍",
+        "refs": [
+          "E3"
+        ],
+        "evidence_id": "m:ocf_to_np@2023-12-31",
+        "status": "verified",
+        "expected": "0.86 倍",
+        "message": "",
+        "sentence": "| 2023年 | 0.86倍[E3] |"
+      },
+      {
+        "text": "1.04倍",
+        "start": 172,
+        "end": 177,
+        "value": 1.04,
+        "unit": "倍",
+        "refs": [
+          "E2"
+        ],
+        "evidence_id": "m:ocf_to_np@2024-12-31",
+        "status": "verified",
+        "expected": "1.04 倍",
+        "message": "",
+        "sentence": "| 2024年 | 1.04倍[E2] |"
+      },
+      {
+        "text": "0.72倍",
+        "start": 194,
+        "end": 199,
+        "value": 0.72,
+        "unit": "倍",
+        "refs": [
+          "E1"
+        ],
+        "evidence_id": "m:ocf_to_np@2025-12-31",
+        "status": "verified",
+        "expected": "0.72 倍",
+        "message": "",
+        "sentence": "| 2025年 | 0.72倍[E1] |"
+      },
+      {
+        "text": "91.18%",
+        "start": 368,
+        "end": 374,
+        "value": 91.18,
+        "unit": "%",
+        "refs": [
+          "E7"
+        ],
+        "evidence_id": "600519|m:gross_margin@2025-12-31",
+        "status": "verified",
+        "expected": "91.18%",
+        "message": "",
+        "sentence": "- **贵州茅台：91.18%**[E7]"
+      },
+      {
+        "text": "77.54%",
+        "start": 389,
+        "end": 395,
+        "value": 77.54,
+        "unit": "%",
+        "refs": [
+          "E8"
+        ],
+        "evidence_id": "000858|m:gross_margin@2025-12-31",
+        "status": "verified",
+        "expected": "77.54%",
+        "message": "",
+        "sentence": "- **五粮液：77.54%**[E8]"
+      },
+      {
+        "text": "86.62%",
+        "start": 411,
+        "end": 417,
+        "value": 86.62,
+        "unit": "%",
+        "refs": [
+          "E9"
+        ],
+        "evidence_id": "000568|m:gross_margin@2025-12-31",
+        "status": "verified",
+        "expected": "86.62%",
+        "message": "",
+        "sentence": "- **泸州老窖：86.62%**[E9]"
+      }
+    ],
+    "total": 6,
+    "verified": 6,
+    "unattributed": 0,
+    "mismatch": 0,
+    "invalid_ref": 0,
+    "unverified": 0,
+    "verifiable_rate": 1.0,
+    "citation_rate": 1.0,
+    "compliance_flags": [],
+    "consistency_flags": []
+  },
+  "steps": [
+    {
+      "tool": "list_metrics",
+      "arguments": {
+        "dimension": "earnings_quality"
+      },
+      "summary": "完成",
+      "refs": [],
+      "latency_ms": 0,
+      "error": null
+    },
+    {
+      "tool": "list_metrics",
+      "arguments": {
+        "dimension": "profitability"
+      },
+      "summary": "完成",
+      "refs": [],
+      "latency_ms": 0,
+      "error": null
+    },
+    {
+      "tool": "get_metrics",
+      "arguments": {
+        "codes": [
+          "ocf_to_np"
+        ],
+        "years": 3
+      },
+      "summary": "返回 3 条带编号的证据",
+      "refs": [
+        "E1",
+        "E2",
+        "E3"
+      ],
+      "latency_ms": 0,
+      "error": null
+    },
+    {
+      "tool": "get_metrics",
+      "arguments": {
+        "codes": [
+          "gross_margin"
+        ],
+        "years": 3
+      },
+      "summary": "返回 3 条带编号的证据",
+      "refs": [
+        "E4",
+        "E5",
+        "E6"
+      ],
+      "latency_ms": 0,
+      "error": null
+    },
+    {
+      "tool": "compare_peers",
+      "arguments": {
+        "codes": [
+          "000858",
+          "000568"
+        ],
+        "metrics": [
+          "gross_margin"
+        ]
+      },
+      "summary": "返回 3 条带编号的证据",
+      "refs": [
+        "E7",
+        "E8",
+        "E9"
+      ],
+      "latency_ms": 64,
+      "error": null
+    }
+  ],
+  "attempts": 1,
+  "model": "kimi-k3.1-pro",
+  "usage": {
+    "calls": 3,
+    "prompt_tokens": 5295,
+    "completion_tokens": 793,
+    "reasoning_tokens": 249,
+    "cached_tokens": 2560,
+    "latency_ms": 26717,
+    "cost_cny_est": 0.092807
+  },
+  "warnings": [],
+  "elapsed_ms": 26787
+}

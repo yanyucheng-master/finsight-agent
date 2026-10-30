@@ -163,3 +163,36 @@ def test_cost_estimate_uses_cache_hits():
     cost = estimate_cost_cny("deepseek-flash", {"prompt_tokens": 1000, "prompt_cache_hit_tokens": 400,
                                                 "completion_tokens": 100})
     assert abs(cost - (400 * 0.04 + 600 * 2 + 100 * 8) / 1e6) < 1e-12
+
+
+def test_budget_charges_upper_bound_for_timeouts_and_reserves_each_retry(monkeypatch):
+    import finsight.llm.gateway as gw
+
+    monkeypatch.setattr(gw, "BUDGET", gw.BudgetGuard())
+    monkeypatch.setenv("LLM_BUDGET_CNY", "10")
+    calls = {"n": 0}
+
+    def handler(request):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise httpx.ReadTimeout("timed out", request=request)
+        return httpx.Response(200, json=ok({"content": "好"}, usage={"prompt_tokens": 10, "completion_tokens": 10}))
+
+    c = OpenAICompatibleClient(settings(provider="kimi", model="kimi-k3.1-pro"), transport=httpx.MockTransport(handler),
+                               backoff_s=0)
+    c.chat([{"role": "user", "content": "hi"}], max_tokens=1000)
+    assert calls["n"] == 2 and gw.BUDGET.calls == 2 and gw.BUDGET.pending == 0
+    assert gw.BUDGET.spent > 1000 * 68 / 1e6  # 超时那次按上界（含 1000 个输出 token）记账
+
+
+def test_budget_reservations_are_atomic_and_unknown_models_refused(monkeypatch):
+    import finsight.llm.gateway as gw
+
+    guard = gw.BudgetGuard()
+    monkeypatch.setenv("LLM_BUDGET_CNY", "0.1")
+    payload = {"messages": [{"role": "user", "content": "hi"}], "max_tokens": 1000}  # 每次约 0.068 元
+    guard.reserve("kimi-k3.1-pro", payload)
+    with pytest.raises(LLMError, match="费用保护"):  # 第一笔尚未结算，第二笔不能共用余额
+        guard.reserve("kimi-k3.1-pro", payload)
+    with pytest.raises(LLMError, match="价格表"):
+        guard.reserve("some-new-model", payload)

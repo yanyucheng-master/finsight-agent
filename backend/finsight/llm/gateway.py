@@ -80,14 +80,18 @@ def estimate_cost_cny(model: str, usage: dict[str, int]) -> float:
 
 
 class BudgetGuard:
-    """进程级费用保护（环境变量 LLM_BUDGET_CNY，未设置或 ≤0 表示不限）。
+    """进程级费用保护（环境变量 LLM_BUDGET_CNY，未设置或 ≤0 表示不限）。这是客户端估算，不是服务商的硬限额。
 
-    每次请求前按“输入字符数 × 未命中单价 + max_tokens × 输出单价”的上界预留，超出预算就拒绝发送；
-    成功后按返回用量记账，没有用量时按预留额记账。这是客户端估算，不是服务商的硬限额。
+    * 每一次发送（包括重试）之前单独预留上界：输入 UTF-8 字节数 × 未命中单价 + max_tokens × 输出单价
+      （一个 token 至少 1 字节，所以字节数是输入 token 的上界）；
+    * 预留在同一把锁里原子地计入“占用”，并发请求不能共用同一份余额；
+    * 成功：按返回用量结算；返回 HTTP 错误：服务端拒绝，不计费；超时 / 网络中断 / 无法解析：费用不明，按预留上界记账；
+    * 设置了预算但模型不在价格表中：拒绝发送（预算不明确时停止）。
     """
 
     def __init__(self) -> None:
         self.spent = 0.0
+        self.pending = 0.0
         self.calls = 0
         self._lock = threading.Lock()
 
@@ -99,17 +103,24 @@ class BudgetGuard:
             return 0.0
 
     def reserve(self, model: str, payload: dict[str, Any]) -> float:
+        limit = self.limit
+        if limit > 0 and model not in LLM_PRICES_CNY:
+            raise LLMError(f"费用保护：模型 {model} 不在价格表 config.LLM_PRICES_CNY 中，无法估算费用，已停止发送")
         _, miss_p, out_p = LLM_PRICES_CNY.get(model, FALLBACK_PRICE_CNY)
-        chars = len(json.dumps(payload.get("messages", []), ensure_ascii=False)) + len(json.dumps(payload.get("tools") or []))
-        amount = (chars * miss_p + int(payload.get("max_tokens", 0)) * out_p) / 1e6  # 1 个字符至多约 1 个 token
-        if self.limit > 0 and self.spent + amount > self.limit:
-            raise LLMError(f"费用保护：已估算花费 {self.spent:.4f} 元，本次请求最多可能再花 {amount:.4f} 元，"
-                           f"将超过预算 {self.limit:.2f} 元（LLM_BUDGET_CNY），已停止发送")
+        nbytes = len(json.dumps({k: payload.get(k) for k in ("messages", "tools")}, ensure_ascii=False).encode("utf-8"))
+        amount = (nbytes * miss_p + int(payload.get("max_tokens", 0)) * out_p) / 1e6
+        with self._lock:
+            if limit > 0 and self.spent + self.pending + amount > limit:
+                raise LLMError(f"费用保护：已估算花费 {self.spent:.4f} 元（另有 {self.pending:.4f} 元进行中），"
+                               f"本次请求最多可能再花 {amount:.4f} 元，将超过预算 {limit:.2f} 元（LLM_BUDGET_CNY），已停止发送")
+            self.pending += amount
         return amount
 
-    def charge(self, amount: float) -> None:
+    def settle(self, reserved: float, actual: float | None) -> None:
+        """actual=None 表示费用不明，按预留上界记账。"""
         with self._lock:
-            self.spent += amount
+            self.pending -= reserved
+            self.spent += reserved if actual is None else actual
             self.calls += 1
 
 
@@ -230,23 +241,25 @@ class OpenAICompatibleClient:
         payload = self.build_payload(messages, tools=tools, tool_choice=tool_choice, temperature=temperature,
                                      max_tokens=max_tokens, json_mode=json_mode)
         headers = {"Authorization": f"Bearer {self.settings.api_key}", "Content-Type": "application/json"}
-        reserved = BUDGET.reserve(self.settings.model, payload)
         last: str = ""
         for attempt in range(self.retries + 1):
+            reserved = BUDGET.reserve(self.settings.model, payload)  # 每次发送（含重试）都单独预留
             started = time.monotonic()
             try:
                 r = self._client.post(self.url, json=payload, headers=headers)
             except httpx.HTTPError as exc:
+                BUDGET.settle(reserved, None)  # 超时 / 断线：服务端可能已计费，按上界记账
                 last = f"网络错误：{type(exc).__name__}: {exc}"
             else:
                 if r.status_code == 200:
                     try:
                         resp = self._parse(r, started, payload["max_tokens"])
                     except LLMError:
-                        BUDGET.charge(reserved)  # 已产生费用但无法解析：按预留额记账
+                        BUDGET.settle(reserved, None)
                         raise
-                    BUDGET.charge(estimate_cost_cny(self.settings.model, resp.usage) if resp.usage else reserved)
+                    BUDGET.settle(reserved, estimate_cost_cny(self.settings.model, resp.usage) if resp.usage else None)
                     return resp
+                BUDGET.settle(reserved, 0.0)
                 last = f"HTTP {r.status_code}: {r.text[:300]}"
                 if r.status_code in (400, 401, 402, 403, 404, 422):
                     raise LLMError(f"{self.settings.provider} 调用失败（{last}）")
