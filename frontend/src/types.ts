@@ -197,6 +197,7 @@ export interface AgentAnswer {
   usage: Record<string, number>;
   warnings: string[];
   elapsed_ms: number;
+  ok?: boolean;
 }
 
 export interface EvidenceDetail {

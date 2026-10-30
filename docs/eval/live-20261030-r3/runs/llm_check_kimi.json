@@ -1,0 +1,64 @@
+{
+ "provider": "kimi",
+ "base_url": "https://api.moonshot.cn/v1",
+ "model": "kimi-k3.1-pro",
+ "enabled": true,
+ "reasoning_effort": "low",
+ "max_tokens": 8192,
+ "key_configured": true,
+ "models": [
+  "kimi-k3",
+  "kimi-k3.1-pro",
+  "kimi-k2.7-code-highspeed",
+  "kimi-k3.1-pro-highspeed",
+  "kimi-k2.7-code",
+  "kimi-k2.6"
+ ],
+ "chat": {
+  "reply": "正常",
+  "finish_reason": "stop",
+  "usage": {
+   "prompt_tokens": 91,
+   "completion_tokens": 28,
+   "total_tokens": 119,
+   "reasoning_tokens": 12,
+   "cache_write_tokens": 0
+  },
+  "reasoning_chars": 47,
+  "served_model": "kimi-k3.1-pro",
+  "latency_ms": 2288
+ },
+ "tool_roundtrip": {
+  "passed": true,
+  "tool_calls": [
+   {
+    "name": "lookup_metric",
+    "arguments": {
+     "code": "600519",
+     "metric": "gross_margin"
+    }
+   }
+  ],
+  "first_finish_reason": "tool_calls",
+  "first_reasoning_chars": 28,
+  "final_reply": "600519 在 2025 年的 gross_margin 为 91.18%。",
+  "final_finish_reason": "stop",
+  "usage": [
+   {
+    "prompt_tokens": 211,
+    "completion_tokens": 78,
+    "total_tokens": 289,
+    "reasoning_tokens": 9,
+    "cache_write_tokens": 0
+   },
+   {
+    "prompt_tokens": 340,
+    "completion_tokens": 46,
+    "total_tokens": 386,
+    "reasoning_tokens": 13,
+    "cache_write_tokens": 256
+   }
+  ],
+  "latency_ms": 5249
+ }
+}

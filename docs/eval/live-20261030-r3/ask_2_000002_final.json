@@ -1,0 +1,855 @@
+{
+  "question": "万科目前最主要的偿债风险是什么？请给出依据。",
+  "answer": "大模型调用失败：预算预留不足，停止调用；已预留 2.3291 元",
+  "annotated_answer": "大模型调用失败：预算预留不足，停止调用；已预留 2.3291 元",
+  "refs": {
+    "E1": "m:interest_coverage@2025-12-31",
+    "E2": "m:debt_ratio@2025-12-31",
+    "E3": "m:cash_to_st_debt@2025-12-31",
+    "E4": "m:current_ratio@2025-12-31",
+    "E5": "f:cf.ocf@2025-12-31",
+    "E6": "f:bs.cash@2025-12-31",
+    "E7": "f:bs.cash@2024-12-31",
+    "E8": "f:bs.cash@2023-12-31",
+    "E9": "f:bs.short_loans@2025-12-31",
+    "E10": "f:bs.short_loans@2024-12-31",
+    "E11": "f:bs.short_loans@2023-12-31",
+    "E12": "f:bs.noncurrent_liab_due_1y@2025-12-31",
+    "E13": "f:bs.noncurrent_liab_due_1y@2024-12-31",
+    "E14": "f:bs.noncurrent_liab_due_1y@2023-12-31",
+    "E15": "f:bs.long_loans@2025-12-31",
+    "E16": "f:bs.long_loans@2024-12-31",
+    "E17": "f:bs.long_loans@2023-12-31",
+    "E18": "f:bs.bonds_payable@2025-12-31",
+    "E19": "f:bs.bonds_payable@2024-12-31",
+    "E20": "f:bs.bonds_payable@2023-12-31",
+    "E21": "f:cf.ocf@2024-12-31",
+    "E22": "f:cf.ocf@2023-12-31",
+    "E23": "m:cash_to_st_debt@2024-12-31",
+    "E24": "m:cash_to_st_debt@2023-12-31",
+    "E25": "m:interest_coverage@2024-12-31",
+    "E26": "m:interest_coverage@2023-12-31",
+    "E27": "m:debt_ratio@2024-12-31",
+    "E28": "m:debt_ratio@2023-12-31",
+    "E29": "m:current_ratio@2024-12-31",
+    "E30": "m:current_ratio@2023-12-31",
+    "E31": "m:ibd_ratio@2025-12-31",
+    "E32": "m:ibd_ratio@2024-12-31",
+    "E33": "m:ibd_ratio@2023-12-31"
+  },
+  "evidence": {
+    "m:interest_coverage@2025-12-31": {
+      "id": "m:interest_coverage@2025-12-31",
+      "kind": "metric",
+      "label": "利息保障倍数",
+      "value": -7.695375925781676,
+      "unit": "times",
+      "period": "2025-12-31",
+      "formula": "(利润总额 + 利息费用) ÷ 利息费用",
+      "expression": "其中：利息费用（2025）=85.02 亿元；利润总额（2025）=-739.24 亿元",
+      "inputs": [
+        "f:is.fe_interest_exp@2025-12-31",
+        "f:is.total_profit@2025-12-31"
+      ],
+      "source": null,
+      "note": null,
+      "status": "ok"
+    },
+    "m:debt_ratio@2025-12-31": {
+      "id": "m:debt_ratio@2025-12-31",
+      "kind": "metric",
+      "label": "资产负债率",
+      "value": 0.7689057595522777,
+      "unit": "ratio",
+      "period": "2025-12-31",
+      "formula": "负债合计 ÷ 资产总计",
+      "expression": "资产总计（2025）=10,206.23 亿元；负债合计（2025）=7,847.63 亿元",
+      "inputs": [
+        "f:bs.total_assets@2025-12-31",
+        "f:bs.total_liabilities@2025-12-31"
+      ],
+      "source": null,
+      "note": null,
+      "status": "ok"
+    },
+    "m:cash_to_st_debt@2025-12-31": {
+      "id": "m:cash_to_st_debt@2025-12-31",
+      "kind": "metric",
+      "label": "现金短债比",
+      "value": 0.4129848913502266,
+      "unit": "times",
+      "period": "2025-12-31",
+      "formula": "(货币资金 + 交易性金融资产) ÷ (短期借款 + 一年内到期的非流动负债 + 应付短期债券)",
+      "expression": "货币资金（2025）=672.41 亿元；一年内到期的非流动负债（2025）=1,366.50 亿元；短期借款（2025）=263.31 亿元；交易性金融资产（2025）=6,801.67 万元",
+      "inputs": [
+        "f:bs.cash@2025-12-31",
+        "f:bs.noncurrent_liab_due_1y@2025-12-31",
+        "f:bs.short_loans@2025-12-31",
+        "f:bs.trading_fin_assets@2025-12-31"
+      ],
+      "source": null,
+      "note": null,
+      "status": "ok"
+    },
+    "m:current_ratio@2025-12-31": {
+      "id": "m:current_ratio@2025-12-31",
+      "kind": "metric",
+      "label": "流动比率",
+      "value": 1.2338577257107808,
+      "unit": "times",
+      "period": "2025-12-31",
+      "formula": "流动资产合计 ÷ 流动负债合计",
+      "expression": "流动资产合计（2025）=6,973.74 亿元；流动负债合计（2025）=5,651.98 亿元",
+      "inputs": [
+        "f:bs.current_assets@2025-12-31",
+        "f:bs.current_liabilities@2025-12-31"
+      ],
+      "source": null,
+      "note": null,
+      "status": "ok"
+    },
+    "f:cf.ocf@2025-12-31": {
+      "id": "f:cf.ocf@2025-12-31",
+      "kind": "fact",
+      "label": "经营活动产生的现金流量净额",
+      "value": -988124860.96,
+      "unit": "CNY",
+      "period": "2025-12-31",
+      "formula": null,
+      "expression": null,
+      "inputs": [],
+      "source": {
+        "provider": "eastmoney",
+        "dataset": "cashflow_annual",
+        "snapshot_id": "c4bd9d36bffb43df87d64932b29d1289",
+        "sha256": "7978cfd69749278b24a781b07e133e89788cc9821851e0ddca3d60470f76f74c",
+        "url": "https://emweb.securities.eastmoney.com/PC_HSF10/NewFinanceAnalysis/xjllbAjaxNew?companyType=4&reportDateType=1&reportType=1&dates=2025-12-31,2024-12-31,2023-12-31,2022-12-31,2021-12-31&code=SZ000002",
+        "fetched_at": "2026-10-27T14:27:32Z",
+        "field": "NETCASH_OPERATE",
+        "report_date": "2025-12-31",
+        "notice_date": "2026-04-01"
+      },
+      "note": null,
+      "status": "ok"
+    },
+    "f:bs.cash@2025-12-31": {
+      "id": "f:bs.cash@2025-12-31",
+      "kind": "fact",
+      "label": "货币资金",
+      "value": 67240949734.9,
+      "unit": "CNY",
+      "period": "2025-12-31",
+      "formula": null,
+      "expression": null,
+      "inputs": [],
+      "source": {
+        "provider": "eastmoney",
+        "dataset": "balance_annual",
+        "snapshot_id": "0dcfc56e403e4c25ae7f3bcc472f664d",
+        "sha256": "846876978731c7f75ab2f86c241223cbd175561c882bda2625653d4c166de19f",
+        "url": "https://emweb.securities.eastmoney.com/PC_HSF10/NewFinanceAnalysis/zcfzbAjaxNew?companyType=4&reportDateType=1&reportType=1&dates=2025-12-31,2024-12-31,2023-12-31,2022-12-31,2021-12-31&code=SZ000002",
+        "fetched_at": "2026-10-27T14:27:09Z",
+        "field": "MONETARYFUNDS",
+        "report_date": "2025-12-31",
+        "notice_date": "2026-04-01"
+      },
+      "note": null,
+      "status": "ok"
+    },
+    "f:bs.cash@2024-12-31": {
+      "id": "f:bs.cash@2024-12-31",
+      "kind": "fact",
+      "label": "货币资金",
+      "value": 88162865022.03,
+      "unit": "CNY",
+      "period": "2024-12-31",
+      "formula": null,
+      "expression": null,
+      "inputs": [],
+      "source": {
+        "provider": "eastmoney",
+        "dataset": "balance_annual",
+        "snapshot_id": "0dcfc56e403e4c25ae7f3bcc472f664d",
+        "sha256": "846876978731c7f75ab2f86c241223cbd175561c882bda2625653d4c166de19f",
+        "url": "https://emweb.securities.eastmoney.com/PC_HSF10/NewFinanceAnalysis/zcfzbAjaxNew?companyType=4&reportDateType=1&reportType=1&dates=2025-12-31,2024-12-31,2023-12-31,2022-12-31,2021-12-31&code=SZ000002",
+        "fetched_at": "2026-10-27T14:27:09Z",
+        "field": "MONETARYFUNDS",
+        "report_date": "2024-12-31",
+        "notice_date": "2025-04-01"
+      },
+      "note": null,
+      "status": "ok"
+    },
+    "f:bs.cash@2023-12-31": {
+      "id": "f:bs.cash@2023-12-31",
+      "kind": "fact",
+      "label": "货币资金",
+      "value": 99813755447.81,
+      "unit": "CNY",
+      "period": "2023-12-31",
+      "formula": null,
+      "expression": null,
+      "inputs": [],
+      "source": {
+        "provider": "eastmoney",
+        "dataset": "balance_annual",
+        "snapshot_id": "0dcfc56e403e4c25ae7f3bcc472f664d",
+        "sha256": "846876978731c7f75ab2f86c241223cbd175561c882bda2625653d4c166de19f",
+        "url": "https://emweb.securities.eastmoney.com/PC_HSF10/NewFinanceAnalysis/zcfzbAjaxNew?companyType=4&reportDateType=1&reportType=1&dates=2025-12-31,2024-12-31,2023-12-31,2022-12-31,2021-12-31&code=SZ000002",
+        "fetched_at": "2026-10-27T14:27:09Z",
+        "field": "MONETARYFUNDS",
+        "report_date": "2023-12-31",
+        "notice_date": "2024-03-29"
+      },
+      "note": null,
+      "status": "ok"
+    },
+    "f:bs.short_loans@2025-12-31": {
+      "id": "f:bs.short_loans@2025-12-31",
+      "kind": "fact",
+      "label": "短期借款",
+      "value": 26331384862.38,
+      "unit": "CNY",
+      "period": "2025-12-31",
+      "formula": null,
+      "expression": null,
+      "inputs": [],
+      "source": {
+        "provider": "eastmoney",
+        "dataset": "balance_annual",
+        "snapshot_id": "0dcfc56e403e4c25ae7f3bcc472f664d",
+        "sha256": "846876978731c7f75ab2f86c241223cbd175561c882bda2625653d4c166de19f",
+        "url": "https://emweb.securities.eastmoney.com/PC_HSF10/NewFinanceAnalysis/zcfzbAjaxNew?companyType=4&reportDateType=1&reportType=1&dates=2025-12-31,2024-12-31,2023-12-31,2022-12-31,2021-12-31&code=SZ000002",
+        "fetched_at": "2026-10-27T14:27:09Z",
+        "field": "SHORT_LOAN",
+        "report_date": "2025-12-31",
+        "notice_date": "2026-04-01"
+      },
+      "note": null,
+      "status": "ok"
+    },
+    "f:bs.short_loans@2024-12-31": {
+      "id": "f:bs.short_loans@2024-12-31",
+      "kind": "fact",
+      "label": "短期借款",
+      "value": 15973061991.55,
+      "unit": "CNY",
+      "period": "2024-12-31",
+      "formula": null,
+      "expression": null,
+      "inputs": [],
+      "source": {
+        "provider": "eastmoney",
+        "dataset": "balance_annual",
+        "snapshot_id": "0dcfc56e403e4c25ae7f3bcc472f664d",
+        "sha256": "846876978731c7f75ab2f86c241223cbd175561c882bda2625653d4c166de19f",
+        "url": "https://emweb.securities.eastmoney.com/PC_HSF10/NewFinanceAnalysis/zcfzbAjaxNew?companyType=4&reportDateType=1&reportType=1&dates=2025-12-31,2024-12-31,2023-12-31,2022-12-31,2021-12-31&code=SZ000002",
+        "fetched_at": "2026-10-27T14:27:09Z",
+        "field": "SHORT_LOAN",
+        "report_date": "2024-12-31",
+        "notice_date": "2025-04-01"
+      },
+      "note": null,
+      "status": "ok"
+    },
+    "f:bs.short_loans@2023-12-31": {
+      "id": "f:bs.short_loans@2023-12-31",
+      "kind": "fact",
+      "label": "短期借款",
+      "value": 1063561883.1,
+      "unit": "CNY",
+      "period": "2023-12-31",
+      "formula": null,
+      "expression": null,
+      "inputs": [],
+      "source": {
+        "provider": "eastmoney",
+        "dataset": "balance_annual",
+        "snapshot_id": "0dcfc56e403e4c25ae7f3bcc472f664d",
+        "sha256": "846876978731c7f75ab2f86c241223cbd175561c882bda2625653d4c166de19f",
+        "url": "https://emweb.securities.eastmoney.com/PC_HSF10/NewFinanceAnalysis/zcfzbAjaxNew?companyType=4&reportDateType=1&reportType=1&dates=2025-12-31,2024-12-31,2023-12-31,2022-12-31,2021-12-31&code=SZ000002",
+        "fetched_at": "2026-10-27T14:27:09Z",
+        "field": "SHORT_LOAN",
+        "report_date": "2023-12-31",
+        "notice_date": "2024-03-29"
+      },
+      "note": null,
+      "status": "ok"
+    },
+    "f:bs.noncurrent_liab_due_1y@2025-12-31": {
+      "id": "f:bs.noncurrent_liab_due_1y@2025-12-31",
+      "kind": "fact",
+      "label": "一年内到期的非流动负债",
+      "value": 136650283100.6,
+      "unit": "CNY",
+      "period": "2025-12-31",
+      "formula": null,
+      "expression": null,
+      "inputs": [],
+      "source": {
+        "provider": "eastmoney",
+        "dataset": "balance_annual",
+        "snapshot_id": "0dcfc56e403e4c25ae7f3bcc472f664d",
+        "sha256": "846876978731c7f75ab2f86c241223cbd175561c882bda2625653d4c166de19f",
+        "url": "https://emweb.securities.eastmoney.com/PC_HSF10/NewFinanceAnalysis/zcfzbAjaxNew?companyType=4&reportDateType=1&reportType=1&dates=2025-12-31,2024-12-31,2023-12-31,2022-12-31,2021-12-31&code=SZ000002",
+        "fetched_at": "2026-10-27T14:27:09Z",
+        "field": "NONCURRENT_LIAB_1YEAR",
+        "report_date": "2025-12-31",
+        "notice_date": "2026-04-01"
+      },
+      "note": null,
+      "status": "ok"
+    },
+    "f:bs.noncurrent_liab_due_1y@2024-12-31": {
+      "id": "f:bs.noncurrent_liab_due_1y@2024-12-31",
+      "kind": "fact",
+      "label": "一年内到期的非流动负债",
+      "value": 146045568389.92,
+      "unit": "CNY",
+      "period": "2024-12-31",
+      "formula": null,
+      "expression": null,
+      "inputs": [],
+      "source": {
+        "provider": "eastmoney",
+        "dataset": "balance_annual",
+        "snapshot_id": "0dcfc56e403e4c25ae7f3bcc472f664d",
+        "sha256": "846876978731c7f75ab2f86c241223cbd175561c882bda2625653d4c166de19f",
+        "url": "https://emweb.securities.eastmoney.com/PC_HSF10/NewFinanceAnalysis/zcfzbAjaxNew?companyType=4&reportDateType=1&reportType=1&dates=2025-12-31,2024-12-31,2023-12-31,2022-12-31,2021-12-31&code=SZ000002",
+        "fetched_at": "2026-10-27T14:27:09Z",
+        "field": "NONCURRENT_LIAB_1YEAR",
+        "report_date": "2024-12-31",
+        "notice_date": "2025-04-01"
+      },
+      "note": null,
+      "status": "ok"
+    },
+    "f:bs.noncurrent_liab_due_1y@2023-12-31": {
+      "id": "f:bs.noncurrent_liab_due_1y@2023-12-31",
+      "kind": "fact",
+      "label": "一年内到期的非流动负债",
+      "value": 64926827016.66,
+      "unit": "CNY",
+      "period": "2023-12-31",
+      "formula": null,
+      "expression": null,
+      "inputs": [],
+      "source": {
+        "provider": "eastmoney",
+        "dataset": "balance_annual",
+        "snapshot_id": "0dcfc56e403e4c25ae7f3bcc472f664d",
+        "sha256": "846876978731c7f75ab2f86c241223cbd175561c882bda2625653d4c166de19f",
+        "url": "https://emweb.securities.eastmoney.com/PC_HSF10/NewFinanceAnalysis/zcfzbAjaxNew?companyType=4&reportDateType=1&reportType=1&dates=2025-12-31,2024-12-31,2023-12-31,2022-12-31,2021-12-31&code=SZ000002",
+        "fetched_at": "2026-10-27T14:27:09Z",
+        "field": "NONCURRENT_LIAB_1YEAR",
+        "report_date": "2023-12-31",
+        "notice_date": "2024-03-29"
+      },
+      "note": null,
+      "status": "ok"
+    },
+    "f:bs.long_loans@2025-12-31": {
+      "id": "f:bs.long_loans@2025-12-31",
+      "kind": "fact",
+      "label": "长期借款",
+      "value": 157185809950.29,
+      "unit": "CNY",
+      "period": "2025-12-31",
+      "formula": null,
+      "expression": null,
+      "inputs": [],
+      "source": {
+        "provider": "eastmoney",
+        "dataset": "balance_annual",
+        "snapshot_id": "0dcfc56e403e4c25ae7f3bcc472f664d",
+        "sha256": "846876978731c7f75ab2f86c241223cbd175561c882bda2625653d4c166de19f",
+        "url": "https://emweb.securities.eastmoney.com/PC_HSF10/NewFinanceAnalysis/zcfzbAjaxNew?companyType=4&reportDateType=1&reportType=1&dates=2025-12-31,2024-12-31,2023-12-31,2022-12-31,2021-12-31&code=SZ000002",
+        "fetched_at": "2026-10-27T14:27:09Z",
+        "field": "LONG_LOAN",
+        "report_date": "2025-12-31",
+        "notice_date": "2026-04-01"
+      },
+      "note": null,
+      "status": "ok"
+    },
+    "f:bs.long_loans@2024-12-31": {
+      "id": "f:bs.long_loans@2024-12-31",
+      "kind": "fact",
+      "label": "长期借款",
+      "value": 178886209211.52,
+      "unit": "CNY",
+      "period": "2024-12-31",
+      "formula": null,
+      "expression": null,
+      "inputs": [],
+      "source": {
+        "provider": "eastmoney",
+        "dataset": "balance_annual",
+        "snapshot_id": "0dcfc56e403e4c25ae7f3bcc472f664d",
+        "sha256": "846876978731c7f75ab2f86c241223cbd175561c882bda2625653d4c166de19f",
+        "url": "https://emweb.securities.eastmoney.com/PC_HSF10/NewFinanceAnalysis/zcfzbAjaxNew?companyType=4&reportDateType=1&reportType=1&dates=2025-12-31,2024-12-31,2023-12-31,2022-12-31,2021-12-31&code=SZ000002",
+        "fetched_at": "2026-10-27T14:27:09Z",
+        "field": "LONG_LOAN",
+        "report_date": "2024-12-31",
+        "notice_date": "2025-04-01"
+      },
+      "note": null,
+      "status": "ok"
+    },
+    "f:bs.long_loans@2023-12-31": {
+      "id": "f:bs.long_loans@2023-12-31",
+      "kind": "fact",
+      "label": "长期借款",
+      "value": 197764142683.89,
+      "unit": "CNY",
+      "period": "2023-12-31",
+      "formula": null,
+      "expression": null,
+      "inputs": [],
+      "source": {
+        "provider": "eastmoney",
+        "dataset": "balance_annual",
+        "snapshot_id": "0dcfc56e403e4c25ae7f3bcc472f664d",
+        "sha256": "846876978731c7f75ab2f86c241223cbd175561c882bda2625653d4c166de19f",
+        "url": "https://emweb.securities.eastmoney.com/PC_HSF10/NewFinanceAnalysis/zcfzbAjaxNew?companyType=4&reportDateType=1&reportType=1&dates=2025-12-31,2024-12-31,2023-12-31,2022-12-31,2021-12-31&code=SZ000002",
+        "fetched_at": "2026-10-27T14:27:09Z",
+        "field": "LONG_LOAN",
+        "report_date": "2023-12-31",
+        "notice_date": "2024-03-29"
+      },
+      "note": null,
+      "status": "ok"
+    },
+    "f:bs.bonds_payable@2025-12-31": {
+      "id": "f:bs.bonds_payable@2025-12-31",
+      "kind": "fact",
+      "label": "应付债券",
+      "value": 11295348685.75,
+      "unit": "CNY",
+      "period": "2025-12-31",
+      "formula": null,
+      "expression": null,
+      "inputs": [],
+      "source": {
+        "provider": "eastmoney",
+        "dataset": "balance_annual",
+        "snapshot_id": "0dcfc56e403e4c25ae7f3bcc472f664d",
+        "sha256": "846876978731c7f75ab2f86c241223cbd175561c882bda2625653d4c166de19f",
+        "url": "https://emweb.securities.eastmoney.com/PC_HSF10/NewFinanceAnalysis/zcfzbAjaxNew?companyType=4&reportDateType=1&reportType=1&dates=2025-12-31,2024-12-31,2023-12-31,2022-12-31,2021-12-31&code=SZ000002",
+        "fetched_at": "2026-10-27T14:27:09Z",
+        "field": "BOND_PAYABLE",
+        "report_date": "2025-12-31",
+        "notice_date": "2026-04-01"
+      },
+      "note": null,
+      "status": "ok"
+    },
+    "f:bs.bonds_payable@2024-12-31": {
+      "id": "f:bs.bonds_payable@2024-12-31",
+      "kind": "fact",
+      "label": "应付债券",
+      "value": 24113132319.88,
+      "unit": "CNY",
+      "period": "2024-12-31",
+      "formula": null,
+      "expression": null,
+      "inputs": [],
+      "source": {
+        "provider": "eastmoney",
+        "dataset": "balance_annual",
+        "snapshot_id": "0dcfc56e403e4c25ae7f3bcc472f664d",
+        "sha256": "846876978731c7f75ab2f86c241223cbd175561c882bda2625653d4c166de19f",
+        "url": "https://emweb.securities.eastmoney.com/PC_HSF10/NewFinanceAnalysis/zcfzbAjaxNew?companyType=4&reportDateType=1&reportType=1&dates=2025-12-31,2024-12-31,2023-12-31,2022-12-31,2021-12-31&code=SZ000002",
+        "fetched_at": "2026-10-27T14:27:09Z",
+        "field": "BOND_PAYABLE",
+        "report_date": "2024-12-31",
+        "notice_date": "2025-04-01"
+      },
+      "note": null,
+      "status": "ok"
+    },
+    "f:bs.bonds_payable@2023-12-31": {
+      "id": "f:bs.bonds_payable@2023-12-31",
+      "kind": "fact",
+      "label": "应付债券",
+      "value": 59871015948.97,
+      "unit": "CNY",
+      "period": "2023-12-31",
+      "formula": null,
+      "expression": null,
+      "inputs": [],
+      "source": {
+        "provider": "eastmoney",
+        "dataset": "balance_annual",
+        "snapshot_id": "0dcfc56e403e4c25ae7f3bcc472f664d",
+        "sha256": "846876978731c7f75ab2f86c241223cbd175561c882bda2625653d4c166de19f",
+        "url": "https://emweb.securities.eastmoney.com/PC_HSF10/NewFinanceAnalysis/zcfzbAjaxNew?companyType=4&reportDateType=1&reportType=1&dates=2025-12-31,2024-12-31,2023-12-31,2022-12-31,2021-12-31&code=SZ000002",
+        "fetched_at": "2026-10-27T14:27:09Z",
+        "field": "BOND_PAYABLE",
+        "report_date": "2023-12-31",
+        "notice_date": "2024-03-29"
+      },
+      "note": null,
+      "status": "ok"
+    },
+    "f:cf.ocf@2024-12-31": {
+      "id": "f:cf.ocf@2024-12-31",
+      "kind": "fact",
+      "label": "经营活动产生的现金流量净额",
+      "value": 3799847632.35,
+      "unit": "CNY",
+      "period": "2024-12-31",
+      "formula": null,
+      "expression": null,
+      "inputs": [],
+      "source": {
+        "provider": "eastmoney",
+        "dataset": "cashflow_annual",
+        "snapshot_id": "c4bd9d36bffb43df87d64932b29d1289",
+        "sha256": "7978cfd69749278b24a781b07e133e89788cc9821851e0ddca3d60470f76f74c",
+        "url": "https://emweb.securities.eastmoney.com/PC_HSF10/NewFinanceAnalysis/xjllbAjaxNew?companyType=4&reportDateType=1&reportType=1&dates=2025-12-31,2024-12-31,2023-12-31,2022-12-31,2021-12-31&code=SZ000002",
+        "fetched_at": "2026-10-27T14:27:32Z",
+        "field": "NETCASH_OPERATE",
+        "report_date": "2024-12-31",
+        "notice_date": "2025-04-01"
+      },
+      "note": null,
+      "status": "ok"
+    },
+    "f:cf.ocf@2023-12-31": {
+      "id": "f:cf.ocf@2023-12-31",
+      "kind": "fact",
+      "label": "经营活动产生的现金流量净额",
+      "value": 3912323920.11,
+      "unit": "CNY",
+      "period": "2023-12-31",
+      "formula": null,
+      "expression": null,
+      "inputs": [],
+      "source": {
+        "provider": "eastmoney",
+        "dataset": "cashflow_annual",
+        "snapshot_id": "c4bd9d36bffb43df87d64932b29d1289",
+        "sha256": "7978cfd69749278b24a781b07e133e89788cc9821851e0ddca3d60470f76f74c",
+        "url": "https://emweb.securities.eastmoney.com/PC_HSF10/NewFinanceAnalysis/xjllbAjaxNew?companyType=4&reportDateType=1&reportType=1&dates=2025-12-31,2024-12-31,2023-12-31,2022-12-31,2021-12-31&code=SZ000002",
+        "fetched_at": "2026-10-27T14:27:32Z",
+        "field": "NETCASH_OPERATE",
+        "report_date": "2023-12-31",
+        "notice_date": "2024-03-29"
+      },
+      "note": null,
+      "status": "ok"
+    },
+    "m:cash_to_st_debt@2024-12-31": {
+      "id": "m:cash_to_st_debt@2024-12-31",
+      "kind": "metric",
+      "label": "现金短债比",
+      "value": 0.5452435497012037,
+      "unit": "times",
+      "period": "2024-12-31",
+      "formula": "(货币资金 + 交易性金融资产) ÷ (短期借款 + 一年内到期的非流动负债 + 应付短期债券)",
+      "expression": "货币资金（2024）=881.63 亿元；一年内到期的非流动负债（2024）=1,460.46 亿元；短期借款（2024）=159.73 亿元；交易性金融资产（2024）=1.77 亿元",
+      "inputs": [
+        "f:bs.cash@2024-12-31",
+        "f:bs.noncurrent_liab_due_1y@2024-12-31",
+        "f:bs.short_loans@2024-12-31",
+        "f:bs.trading_fin_assets@2024-12-31"
+      ],
+      "source": null,
+      "note": null,
+      "status": "ok"
+    },
+    "m:cash_to_st_debt@2023-12-31": {
+      "id": "m:cash_to_st_debt@2023-12-31",
+      "kind": "metric",
+      "label": "现金短债比",
+      "value": 1.5127561940840912,
+      "unit": "times",
+      "period": "2023-12-31",
+      "formula": "(货币资金 + 交易性金融资产) ÷ (短期借款 + 一年内到期的非流动负债 + 应付短期债券)",
+      "expression": "货币资金（2023）=998.14 亿元；一年内到期的非流动负债（2023）=649.27 亿元；短期借款（2023）=10.64 亿元；交易性金融资产（2023）=1,361.41 万元",
+      "inputs": [
+        "f:bs.cash@2023-12-31",
+        "f:bs.noncurrent_liab_due_1y@2023-12-31",
+        "f:bs.short_loans@2023-12-31",
+        "f:bs.trading_fin_assets@2023-12-31"
+      ],
+      "source": null,
+      "note": null,
+      "status": "ok"
+    },
+    "m:interest_coverage@2024-12-31": {
+      "id": "m:interest_coverage@2024-12-31",
+      "kind": "metric",
+      "label": "利息保障倍数",
+      "value": -5.336578770800442,
+      "unit": "times",
+      "period": "2024-12-31",
+      "formula": "(利润总额 + 利息费用) ÷ 利息费用",
+      "expression": "其中：利息费用（2024）=74.47 亿元；利润总额（2024）=-471.87 亿元",
+      "inputs": [
+        "f:is.fe_interest_exp@2024-12-31",
+        "f:is.total_profit@2024-12-31"
+      ],
+      "source": null,
+      "note": null,
+      "status": "ok"
+    },
+    "m:interest_coverage@2023-12-31": {
+      "id": "m:interest_coverage@2023-12-31",
+      "kind": "metric",
+      "label": "利息保障倍数",
+      "value": 6.194869870777105,
+      "unit": "times",
+      "period": "2023-12-31",
+      "formula": "(利润总额 + 利息费用) ÷ 利息费用",
+      "expression": "其中：利息费用（2023）=57.37 亿元；利润总额（2023）=298.05 亿元",
+      "inputs": [
+        "f:is.fe_interest_exp@2023-12-31",
+        "f:is.total_profit@2023-12-31"
+      ],
+      "source": null,
+      "note": null,
+      "status": "ok"
+    },
+    "m:debt_ratio@2024-12-31": {
+      "id": "m:debt_ratio@2024-12-31",
+      "kind": "metric",
+      "label": "资产负债率",
+      "value": 0.7365581613147495,
+      "unit": "ratio",
+      "period": "2024-12-31",
+      "formula": "负债合计 ÷ 资产总计",
+      "expression": "资产总计（2024）=12,862.60 亿元；负债合计（2024）=9,474.05 亿元",
+      "inputs": [
+        "f:bs.total_assets@2024-12-31",
+        "f:bs.total_liabilities@2024-12-31"
+      ],
+      "source": null,
+      "note": null,
+      "status": "ok"
+    },
+    "m:debt_ratio@2023-12-31": {
+      "id": "m:debt_ratio@2023-12-31",
+      "kind": "metric",
+      "label": "资产负债率",
+      "value": 0.7322434230245014,
+      "unit": "ratio",
+      "period": "2023-12-31",
+      "formula": "负债合计 ÷ 资产总计",
+      "expression": "资产总计（2023）=15,048.50 亿元；负债合计（2023）=11,019.17 亿元",
+      "inputs": [
+        "f:bs.total_assets@2023-12-31",
+        "f:bs.total_liabilities@2023-12-31"
+      ],
+      "source": null,
+      "note": null,
+      "status": "ok"
+    },
+    "m:current_ratio@2024-12-31": {
+      "id": "m:current_ratio@2024-12-31",
+      "kind": "metric",
+      "label": "流动比率",
+      "value": 1.275984976997772,
+      "unit": "times",
+      "period": "2024-12-31",
+      "formula": "流动资产合计 ÷ 流动负债合计",
+      "expression": "流动资产合计（2024）=9,175.12 亿元；流动负债合计（2024）=7,190.62 亿元",
+      "inputs": [
+        "f:bs.current_assets@2024-12-31",
+        "f:bs.current_liabilities@2024-12-31"
+      ],
+      "source": null,
+      "note": null,
+      "status": "ok"
+    },
+    "m:current_ratio@2023-12-31": {
+      "id": "m:current_ratio@2023-12-31",
+      "kind": "metric",
+      "label": "流动比率",
+      "value": 1.3997088052799838,
+      "unit": "times",
+      "period": "2023-12-31",
+      "formula": "流动资产合计 ÷ 流动负债合计",
+      "expression": "流动资产合计（2023）=11,502.60 亿元；流动负债合计（2023）=8,217.85 亿元",
+      "inputs": [
+        "f:bs.current_assets@2023-12-31",
+        "f:bs.current_liabilities@2023-12-31"
+      ],
+      "source": null,
+      "note": null,
+      "status": "ok"
+    },
+    "m:ibd_ratio@2025-12-31": {
+      "id": "m:ibd_ratio@2025-12-31",
+      "kind": "metric",
+      "label": "有息负债率",
+      "value": 0.33887069938309994,
+      "unit": "ratio",
+      "period": "2025-12-31",
+      "formula": "有息负债 ÷ 资产总计",
+      "expression": "资产总计（2025）=10,206.23 亿元；有息负债（2025）=3,458.59 亿元",
+      "inputs": [
+        "f:bs.total_assets@2025-12-31",
+        "m:ibd@2025-12-31"
+      ],
+      "source": null,
+      "note": null,
+      "status": "ok"
+    },
+    "m:ibd_ratio@2024-12-31": {
+      "id": "m:ibd_ratio@2024-12-31",
+      "kind": "metric",
+      "label": "有息负债率",
+      "value": 0.29691586405899484,
+      "unit": "ratio",
+      "period": "2024-12-31",
+      "formula": "有息负债 ÷ 资产总计",
+      "expression": "资产总计（2024）=12,862.60 亿元；有息负债（2024）=3,819.11 亿元",
+      "inputs": [
+        "f:bs.total_assets@2024-12-31",
+        "m:ibd@2024-12-31"
+      ],
+      "source": null,
+      "note": null,
+      "status": "ok"
+    },
+    "m:ibd_ratio@2023-12-31": {
+      "id": "m:ibd_ratio@2023-12-31",
+      "kind": "metric",
+      "label": "有息负债率",
+      "value": 0.2281091815978421,
+      "unit": "ratio",
+      "period": "2023-12-31",
+      "formula": "有息负债 ÷ 资产总计",
+      "expression": "资产总计（2023）=15,048.50 亿元；有息负债（2023）=3,432.70 亿元",
+      "inputs": [
+        "f:bs.total_assets@2023-12-31",
+        "m:ibd@2023-12-31"
+      ],
+      "source": null,
+      "note": null,
+      "status": "ok"
+    }
+  },
+  "verification": {
+    "claims": [],
+    "total": 0,
+    "verified": 0,
+    "unattributed": 0,
+    "mismatch": 0,
+    "invalid_ref": 0,
+    "unverified": 0,
+    "verifiable_rate": 1.0,
+    "citation_rate": 1.0,
+    "compliance_flags": [],
+    "consistency_flags": []
+  },
+  "steps": [
+    {
+      "tool": "get_risk_signals",
+      "arguments": {
+        "dimension": "solvency"
+      },
+      "summary": "完成",
+      "refs": [],
+      "latency_ms": 0,
+      "error": null
+    },
+    {
+      "tool": "list_metrics",
+      "arguments": {
+        "dimension": "solvency"
+      },
+      "summary": "完成",
+      "refs": [],
+      "latency_ms": 0,
+      "error": null
+    },
+    {
+      "tool": "get_statement_items",
+      "arguments": {
+        "keywords": [
+          "货币资金",
+          "短期借款",
+          "一年内到期的非流动负债",
+          "长期借款",
+          "应付债券",
+          "经营活动产生的现金流量净额"
+        ],
+        "years": 3
+      },
+      "summary": "返回 18 条带编号的证据",
+      "refs": [
+        "E6",
+        "E7",
+        "E8",
+        "E9",
+        "E10",
+        "E11",
+        "E12",
+        "E13",
+        "E14",
+        "E15",
+        "E16",
+        "E17",
+        "E18",
+        "E19",
+        "E20",
+        "E5",
+        "E21",
+        "E22"
+      ],
+      "latency_ms": 0,
+      "error": null
+    },
+    {
+      "tool": "get_metrics",
+      "arguments": {
+        "codes": [
+          "cash_to_st_debt",
+          "interest_coverage",
+          "debt_ratio",
+          "current_ratio",
+          "ibd_ratio"
+        ],
+        "years": 3
+      },
+      "summary": "返回 15 条带编号的证据",
+      "refs": [
+        "E3",
+        "E23",
+        "E24",
+        "E1",
+        "E25",
+        "E26",
+        "E2",
+        "E27",
+        "E28",
+        "E4",
+        "E29",
+        "E30",
+        "E31",
+        "E32",
+        "E33"
+      ],
+      "latency_ms": 0,
+      "error": null
+    }
+  ],
+  "attempts": 0,
+  "model": "kimi-k3.1-pro",
+  "usage": {
+    "calls": 2,
+    "prompt_tokens": 3841,
+    "completion_tokens": 331,
+    "reasoning_tokens": 80,
+    "cached_tokens": 2048,
+    "latency_ms": 22254,
+    "cost_cny_est": 0.048479
+  },
+  "warnings": [
+    "预算预留不足，停止调用；已预留 2.3291 元"
+  ],
+  "elapsed_ms": 22259
+}

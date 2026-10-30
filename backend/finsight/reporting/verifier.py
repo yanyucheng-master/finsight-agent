@@ -33,7 +33,8 @@ CITE_RE = re.compile(r"[\[【]\s*(E\d+(?:\s*[,，、]\s*E\d+)*)\s*[\]】]")
 NUM_RE = re.compile(
     # 左边界只排除“数字、ASCII 字母、小数点、千分位逗号”。不能用 \w：Python 里汉字也属于 \w，
     # 会导致“毛利率为91.18%”这类紧贴汉字的数字整个漏检、“为1,032.80”被截成“032.80”（2026-10-30 真实测试发现）。
-    r"(?<![0-9A-Za-z.,])(?P<sign>[-−+]?)(?P<num>\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)\s*"
+    # 逗号：只有“数字,”才视为千分位（排除），“91.18%[E1],99.99%”里引用后的逗号是分隔符，后面的数字要抽取。
+    r"(?<![0-9A-Za-z.])(?<!\d,)(?P<sign>[-−+]?)(?P<num>\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)\s*"
     r"(?P<unit>亿元|万元|元/股|元|个百分点|百分点|pp|%|％|倍|天|x|X)?"
 )
 # 不视为断言数字的上下文
@@ -45,7 +46,8 @@ DATE_RE = re.compile(r"\d{4}[-/.]\d{1,2}[-/.]\d{1,2}")
 ADVICE_RE = re.compile(r"(建议|推荐|可以|应当|宜)\s*(买入|卖出|增持|减持|持有|抄底|加仓|减仓)|目标价|买入评级|卖出评级")
 
 # 表示“变化方向为负”的措辞（只看数字前、同一分句内）。“降至 / 减至”描述的是水平，不算。
-NEG_WORDS = re.compile(r"(下降|下滑|减少|下跌|回落|收缩|缩减|萎缩)(?!至|到)|亏损|净流出|流出|为负|负增长|减亏")
+# “减亏 / 亏损收窄”表示改善，不算负向。
+NEG_WORDS = re.compile(r"(下降|下滑|减少|下跌|回落|收缩|缩减|萎缩)(?!至|到)|亏损(?!收窄|减少|缩小|额收窄)|净流出|流出|为负|负增长")
 
 UNIT_SCALE = {"亿元": 1e8, "万元": 1e4, "元": 1.0, "元/股": 1.0}
 
@@ -139,7 +141,7 @@ def _candidates(display: float, num: str, unit: str | None, ev_unit: str) -> lis
 
 
 def _matches(display: float, num: str, unit: str | None, ev: Evidence, *, signed: bool = False,
-             negative_words: bool = False) -> tuple[bool, str]:
+             negative_words: bool = False, plus: bool = False) -> tuple[bool, str]:
     """数值比对。正负号规则：
     * 文本带显式正负号（+12.30% / -1.21%）：必须与证据符号一致；
     * 文本不带符号、证据为负：只有数字前（同一分句）有“下降 / 亏损 / 流出”等负向措辞才算一致；
@@ -150,6 +152,8 @@ def _matches(display: float, num: str, unit: str | None, ev: Evidence, *, signed
         # 文本证据（如核验汇总、审计意见）：数字原样出现在证据文本中即视为一致
         return (num.replace(",", "") in ev.value.replace(",", "")), ""
     target = float(ev.value)
+    if plus and negative_words:
+        return False, "措辞表示下降 / 亏损，却写了正号“+”，方向自相矛盾"
     for cand in _candidates(display, num, unit, ev.unit):
         if math.isclose(cand.value, target, abs_tol=cand.tol, rel_tol=1e-9):
             if not signed and negative_words and target > cand.tol:
@@ -168,12 +172,12 @@ def _sign_context(text: str, start: int) -> bool:
 
 
 def _attribute(display: float, num: str, unit: str | None, refs: dict[str, Evidence], sentence: str, *,
-               signed: bool = False, negative_words: bool = False) -> Evidence | None:
+               signed: bool = False, negative_words: bool = False, plus: bool = False) -> Evidence | None:
     """为未标注引用的数字寻找唯一可信的证据归属：数值一致（不允许正负号翻转）且
     证据名称出现在同一句中；否则仅在“有效数字较多且全局唯一”时归属，避免巧合匹配。"""
     hits = []
     for ev in refs.values():
-        ok, note = _matches(display, num, unit, ev, signed=signed, negative_words=negative_words)
+        ok, note = _matches(display, num, unit, ev, signed=signed, negative_words=negative_words, plus=plus)
         if ok and not note:
             hits.append(ev)
     if not hits:
@@ -230,6 +234,7 @@ def verify(text: str, refs: dict[str, Evidence]) -> VerificationResult:
             continue
         sign = -1.0 if m.group("sign") in ("-", "−") else 1.0
         signed = bool(m.group("sign"))
+        plus = m.group("sign") == "+"
         neg_words = _sign_context(mtext, m.start())
         display = sign * float(raw)
         # 2) 关联引用：数字之后、下一个数字之前（同一句内）的第一个引用组
@@ -253,7 +258,7 @@ def verify(text: str, refs: dict[str, Evidence]) -> VerificationResult:
                     ev = refs.get(i)
                     if ev is None:
                         continue
-                    ok, note = _matches(display, num, unit, ev, signed=signed, negative_words=neg_words)
+                    ok, note = _matches(display, num, unit, ev, signed=signed, negative_words=neg_words, plus=plus)
                     if not ok and note:
                         sign_note = note
                     if ok:
@@ -270,7 +275,8 @@ def verify(text: str, refs: dict[str, Evidence]) -> VerificationResult:
                     claim.message = (f"与 {ids[0]}（{first.label}）的数值 {claim.expected} 方向不一致：{sign_note}" if sign_note
                                      else f"与 {ids[0]}（{first.label}）的数值 {claim.expected} 不一致")
         else:
-            hit_ev = _attribute(display, num, unit, refs, claim.sentence, signed=signed, negative_words=neg_words)
+            hit_ev = _attribute(display, num, unit, refs, claim.sentence, signed=signed, negative_words=neg_words,
+                                plus=plus)
             if hit_ev is not None:
                 claim.status, claim.evidence_id = "unattributed", hit_ev.id
                 claim.expected = fmt_value(hit_ev.value, hit_ev.unit)

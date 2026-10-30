@@ -133,7 +133,7 @@ def run(provider: str) -> int:
             line = (f"问答 {i}（{code}）：工具调用 {len(ans.steps)} 次，数字 {v.total} 个，通过 {v.verified}，"
                     f"无证据 {v.unverified}，不一致 {v.mismatch}，耗时 {ans.elapsed_ms} ms，用量 {ans.usage}"
                     + (f"，警告 {ans.warnings}" if ans.warnings else ""))
-            if ans.attempts == 0 or not ans.answer:
+            if not ans.ok:
                 failures.append(f"问答 {i} 调用失败")
             elif not v.passed:
                 failures.append(f"问答 {i} 仍有未通过核验的内容")

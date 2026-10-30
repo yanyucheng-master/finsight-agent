@@ -1,0 +1,30 @@
+{
+ "provider": "kimi",
+ "config": {
+  "provider": "kimi",
+  "base_url": "https://api.moonshot.cn/v1",
+  "model": "kimi-k3.1-pro",
+  "enabled": true,
+  "reasoning_effort": "low",
+  "max_tokens": 8192
+ },
+ "started": "2026-10-30 13:26:42",
+ "checks": {
+  "deepseek": "通过",
+  "kimi": "通过"
+ },
+ "items": [
+  "简报 600519：模式 llm，尝试 1 次，数字 35 个，通过 35，无证据 0，不一致 0，耗时 85074 ms，用量 {'calls': 1, 'prompt_tokens': 6236, 'completion_tokens': 3059, 'reasoning_tokens': 2089, 'cached_tokens': 0, 'latency_ms': 85069, 'cost_cny_est': 0.28908}",
+  "简报 000002：模式 llm，尝试 1 次，数字 31 个，通过 31，无证据 0，不一致 0，耗时 65485 ms，用量 {'calls': 1, 'prompt_tokens': 6665, 'completion_tokens': 2078, 'reasoning_tokens': 1094, 'cached_tokens': 256, 'latency_ms': 65479, 'cost_cny_est': 0.224954}",
+  "简报 600518：模式 llm，尝试 1 次，数字 71 个，通过 71，无证据 0，不一致 0，耗时 86696 ms，用量 {'calls': 1, 'prompt_tokens': 6548, 'completion_tokens': 3381, 'reasoning_tokens': 1829, 'cached_tokens': 256, 'latency_ms': 86688, 'cost_cny_est': 0.312037}",
+  "问答 1（600519）：工具调用 4 次，数字 0 个，通过 0，无证据 0，不一致 0，耗时 13840 ms，用量 {'calls': 2, 'prompt_tokens': 2889, 'completion_tokens': 325, 'reasoning_tokens': 102, 'cached_tokens': 1024, 'latency_ms': 13767, 'cost_cny_est': 0.047676}，警告 ['预算预留不足，停止调用；已预留 1.8264 元']",
+  "问答 2（000002）：工具调用 3 次，数字 0 个，通过 0，无证据 0，不一致 0，耗时 6700 ms，用量 {'calls': 1, 'prompt_tokens': 1090, 'completion_tokens': 255, 'reasoning_tokens': 85, 'cached_tokens': 768, 'latency_ms': 6697, 'cost_cny_est': 0.022524}，警告 ['预算预留不足，停止调用；已预留 1.8894 元']"
+ ],
+ "finished": "2026-10-30 13:31:13",
+ "cost_cny_est": 0.916985,
+ "budget_cny": 3.0,
+ "failures": [
+  "问答 1 调用失败",
+  "问答 2 调用失败"
+ ]
+}

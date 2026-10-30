@@ -117,3 +117,15 @@ def test_failed_revision_keeps_answer(env):
     ans = ResearchAgent(diag, MockLLM(responder=responder)).ask("净现比？")
     assert ans.answer.startswith("净现比为") and ans.verification.unverified == 1
     assert any("保留原回答" in w for w in ans.warnings)
+
+
+def test_failed_call_is_not_ok_even_though_empty_text_passes(env):
+    from finsight.llm.gateway import LLMError
+
+    diag, _ = env
+
+    def boom(messages, tools):
+        raise LLMError("费用保护：已停止发送")
+
+    ans = ResearchAgent(diag, MockLLM(responder=boom)).ask("净现比？")
+    assert ans.ok is False and ans.attempts == 0

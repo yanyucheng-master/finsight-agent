@@ -1,0 +1,320 @@
+{
+ "question": "茅台近三年的利润现金含量如何？和五粮液、泸州老窖相比毛利率怎么样？",
+ "answer": "大模型调用失败：预算预留不足，停止调用；已预留 1.8264 元",
+ "annotated_answer": "大模型调用失败：预算预留不足，停止调用；已预留 1.8264 元",
+ "refs": {
+  "E1": "m:ocf_to_np@2025-12-31",
+  "E2": "m:ocf_to_np@2024-12-31",
+  "E3": "m:ocf_to_np@2023-12-31",
+  "E4": "m:cash_to_revenue@2025-12-31",
+  "E5": "m:cash_to_revenue@2024-12-31",
+  "E6": "m:cash_to_revenue@2023-12-31",
+  "E7": "m:gross_margin@2025-12-31",
+  "E8": "m:gross_margin@2024-12-31",
+  "E9": "m:gross_margin@2023-12-31",
+  "E10": "600519|m:gross_margin@2025-12-31",
+  "E11": "000858|m:gross_margin@2025-12-31",
+  "E12": "000568|m:gross_margin@2025-12-31"
+ },
+ "evidence": {
+  "m:ocf_to_np@2025-12-31": {
+   "id": "m:ocf_to_np@2025-12-31",
+   "kind": "metric",
+   "label": "净现比",
+   "value": 0.7211577861097138,
+   "unit": "times",
+   "period": "2025-12-31",
+   "formula": "经营活动现金流量净额 ÷ 净利润",
+   "expression": "经营活动产生的现金流量净额（2025）=615.22 亿元；净利润（2025）=853.10 亿元",
+   "inputs": [
+    "f:cf.ocf@2025-12-31",
+    "f:is.net_profit@2025-12-31"
+   ],
+   "source": null,
+   "note": null,
+   "status": "ok"
+  },
+  "m:ocf_to_np@2024-12-31": {
+   "id": "m:ocf_to_np@2024-12-31",
+   "kind": "metric",
+   "label": "净现比",
+   "value": 1.0350251711923593,
+   "unit": "times",
+   "period": "2024-12-31",
+   "formula": "经营活动现金流量净额 ÷ 净利润",
+   "expression": "经营活动产生的现金流量净额（2024）=924.64 亿元；净利润（2024）=893.35 亿元",
+   "inputs": [
+    "f:cf.ocf@2024-12-31",
+    "f:is.net_profit@2024-12-31"
+   ],
+   "source": null,
+   "note": null,
+   "status": "ok"
+  },
+  "m:ocf_to_np@2023-12-31": {
+   "id": "m:ocf_to_np@2023-12-31",
+   "kind": "metric",
+   "label": "净现比",
+   "value": 0.8590296640178982,
+   "unit": "times",
+   "period": "2023-12-31",
+   "formula": "经营活动现金流量净额 ÷ 净利润",
+   "expression": "经营活动产生的现金流量净额（2023）=665.93 亿元；净利润（2023）=775.21 亿元",
+   "inputs": [
+    "f:cf.ocf@2023-12-31",
+    "f:is.net_profit@2023-12-31"
+   ],
+   "source": null,
+   "note": null,
+   "status": "ok"
+  },
+  "m:cash_to_revenue@2025-12-31": {
+   "id": "m:cash_to_revenue@2025-12-31",
+   "kind": "metric",
+   "label": "收现比",
+   "value": 1.0897445585286807,
+   "unit": "times",
+   "period": "2025-12-31",
+   "formula": "销售商品、提供劳务收到的现金 ÷ 营业收入",
+   "expression": "销售商品、提供劳务收到的现金（2025）=1,839.90 亿元；营业收入（2025）=1,688.38 亿元",
+   "inputs": [
+    "f:cf.sales_cash@2025-12-31",
+    "f:is.revenue@2025-12-31"
+   ],
+   "source": null,
+   "note": null,
+   "status": "ok"
+  },
+  "m:cash_to_revenue@2024-12-31": {
+   "id": "m:cash_to_revenue@2024-12-31",
+   "kind": "metric",
+   "label": "收现比",
+   "value": 1.0687308913303264,
+   "unit": "times",
+   "period": "2024-12-31",
+   "formula": "销售商品、提供劳务收到的现金 ÷ 营业收入",
+   "expression": "销售商品、提供劳务收到的现金（2024）=1,826.45 亿元；营业收入（2024）=1,708.99 亿元",
+   "inputs": [
+    "f:cf.sales_cash@2024-12-31",
+    "f:is.revenue@2024-12-31"
+   ],
+   "source": null,
+   "note": null,
+   "status": "ok"
+  },
+  "m:cash_to_revenue@2023-12-31": {
+   "id": "m:cash_to_revenue@2023-12-31",
+   "kind": "metric",
+   "label": "收现比",
+   "value": 1.10837506758749,
+   "unit": "times",
+   "period": "2023-12-31",
+   "formula": "销售商品、提供劳务收到的现金 ÷ 营业收入",
+   "expression": "销售商品、提供劳务收到的现金（2023）=1,637.00 亿元；营业收入（2023）=1,476.94 亿元",
+   "inputs": [
+    "f:cf.sales_cash@2023-12-31",
+    "f:is.revenue@2023-12-31"
+   ],
+   "source": null,
+   "note": null,
+   "status": "ok"
+  },
+  "m:gross_margin@2025-12-31": {
+   "id": "m:gross_margin@2025-12-31",
+   "kind": "metric",
+   "label": "毛利率",
+   "value": 0.9117955168348006,
+   "unit": "ratio",
+   "period": "2025-12-31",
+   "formula": "(营业收入 − 营业成本) ÷ 营业收入",
+   "expression": "营业成本（2025）=148.92 亿元；营业收入（2025）=1,688.38 亿元",
+   "inputs": [
+    "f:is.cogs@2025-12-31",
+    "f:is.revenue@2025-12-31"
+   ],
+   "source": null,
+   "note": null,
+   "status": "ok"
+  },
+  "m:gross_margin@2024-12-31": {
+   "id": "m:gross_margin@2024-12-31",
+   "kind": "metric",
+   "label": "毛利率",
+   "value": 0.9193121663606456,
+   "unit": "ratio",
+   "period": "2024-12-31",
+   "formula": "(营业收入 − 营业成本) ÷ 营业收入",
+   "expression": "营业成本（2024）=137.89 亿元；营业收入（2024）=1,708.99 亿元",
+   "inputs": [
+    "f:is.cogs@2024-12-31",
+    "f:is.revenue@2024-12-31"
+   ],
+   "source": null,
+   "note": null,
+   "status": "ok"
+  },
+  "m:gross_margin@2023-12-31": {
+   "id": "m:gross_margin@2023-12-31",
+   "kind": "metric",
+   "label": "毛利率",
+   "value": 0.9196493724135798,
+   "unit": "ratio",
+   "period": "2023-12-31",
+   "formula": "(营业收入 − 营业成本) ÷ 营业收入",
+   "expression": "营业成本（2023）=118.67 亿元；营业收入（2023）=1,476.94 亿元",
+   "inputs": [
+    "f:is.cogs@2023-12-31",
+    "f:is.revenue@2023-12-31"
+   ],
+   "source": null,
+   "note": null,
+   "status": "ok"
+  },
+  "600519|m:gross_margin@2025-12-31": {
+   "id": "600519|m:gross_margin@2025-12-31",
+   "kind": "metric",
+   "label": "贵州茅台毛利率",
+   "value": 0.9117955168348006,
+   "unit": "ratio",
+   "period": "2025-12-31",
+   "formula": "(营业收入 − 营业成本) ÷ 营业收入",
+   "expression": "营业成本（2025）=148.92 亿元；营业收入（2025）=1,688.38 亿元",
+   "inputs": [
+    "f:is.cogs@2025-12-31",
+    "f:is.revenue@2025-12-31"
+   ],
+   "source": null,
+   "note": null,
+   "status": "ok"
+  },
+  "000858|m:gross_margin@2025-12-31": {
+   "id": "000858|m:gross_margin@2025-12-31",
+   "kind": "metric",
+   "label": "五粮液毛利率",
+   "value": 0.7754184152047013,
+   "unit": "ratio",
+   "period": "2025-12-31",
+   "formula": "(营业收入 − 营业成本) ÷ 营业收入",
+   "expression": "营业成本（2025）=91.02 亿元；营业收入（2025）=405.29 亿元",
+   "inputs": [
+    "f:is.cogs@2025-12-31",
+    "f:is.revenue@2025-12-31"
+   ],
+   "source": null,
+   "note": null,
+   "status": "ok"
+  },
+  "000568|m:gross_margin@2025-12-31": {
+   "id": "000568|m:gross_margin@2025-12-31",
+   "kind": "metric",
+   "label": "泸州老窖毛利率",
+   "value": 0.8662411815119095,
+   "unit": "ratio",
+   "period": "2025-12-31",
+   "formula": "(营业收入 − 营业成本) ÷ 营业收入",
+   "expression": "营业成本（2025）=34.42 亿元；营业收入（2025）=257.31 亿元",
+   "inputs": [
+    "f:is.cogs@2025-12-31",
+    "f:is.revenue@2025-12-31"
+   ],
+   "source": null,
+   "note": null,
+   "status": "ok"
+  }
+ },
+ "verification": {
+  "claims": [],
+  "total": 0,
+  "verified": 0,
+  "unattributed": 0,
+  "mismatch": 0,
+  "invalid_ref": 0,
+  "unverified": 0,
+  "verifiable_rate": 1.0,
+  "citation_rate": 1.0,
+  "compliance_flags": [],
+  "consistency_flags": []
+ },
+ "steps": [
+  {
+   "tool": "list_metrics",
+   "arguments": {
+    "dimension": "earnings_quality"
+   },
+   "summary": "完成",
+   "refs": [],
+   "latency_ms": 0,
+   "error": null
+  },
+  {
+   "tool": "list_metrics",
+   "arguments": {
+    "dimension": "profitability"
+   },
+   "summary": "完成",
+   "refs": [],
+   "latency_ms": 0,
+   "error": null
+  },
+  {
+   "tool": "get_metrics",
+   "arguments": {
+    "codes": [
+     "ocf_to_np",
+     "cash_to_revenue",
+     "gross_margin"
+    ],
+    "years": 3
+   },
+   "summary": "返回 9 条带编号的证据",
+   "refs": [
+    "E1",
+    "E2",
+    "E3",
+    "E4",
+    "E5",
+    "E6",
+    "E7",
+    "E8",
+    "E9"
+   ],
+   "latency_ms": 0,
+   "error": null
+  },
+  {
+   "tool": "compare_peers",
+   "arguments": {
+    "codes": [
+     "000858",
+     "000568"
+    ],
+    "metrics": [
+     "gross_margin"
+    ]
+   },
+   "summary": "返回 3 条带编号的证据",
+   "refs": [
+    "E10",
+    "E11",
+    "E12"
+   ],
+   "latency_ms": 68,
+   "error": null
+  }
+ ],
+ "attempts": 0,
+ "model": "kimi-k3.1-pro",
+ "usage": {
+  "calls": 2,
+  "prompt_tokens": 2889,
+  "completion_tokens": 325,
+  "reasoning_tokens": 102,
+  "cached_tokens": 1024,
+  "latency_ms": 13767,
+  "cost_cny_est": 0.047676
+ },
+ "warnings": [
+  "预算预留不足，停止调用；已预留 1.8264 元"
+ ],
+ "elapsed_ms": 13840
+}

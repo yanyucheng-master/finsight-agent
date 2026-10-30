@@ -1,0 +1,66 @@
+{
+ "provider": "deepseek",
+ "base_url": "https://api.deepseek.com",
+ "model": "deepseek-flash",
+ "enabled": true,
+ "reasoning_effort": "low",
+ "max_tokens": 8192,
+ "key_configured": true,
+ "models": [
+  "deepseek-flash",
+  "deepseek-v4-pro"
+ ],
+ "chat": {
+  "reply": "正常",
+  "finish_reason": "stop",
+  "usage": {
+   "prompt_tokens": 35,
+   "completion_tokens": 52,
+   "total_tokens": 87,
+   "cached_tokens": 0,
+   "reasoning_tokens": 50,
+   "prompt_cache_hit_tokens": 0,
+   "prompt_cache_miss_tokens": 35
+  },
+  "reasoning_chars": 83,
+  "served_model": "deepseek-flash",
+  "latency_ms": 904
+ },
+ "tool_roundtrip": {
+  "passed": true,
+  "tool_calls": [
+   {
+    "name": "lookup_metric",
+    "arguments": {
+     "code": "600519",
+     "metric": "gross_margin"
+    }
+   }
+  ],
+  "first_finish_reason": "tool_calls",
+  "first_reasoning_chars": 0,
+  "final_reply": "600519 在 2025 年的 gross_margin 为 91.18%。",
+  "final_finish_reason": "stop",
+  "usage": [
+   {
+    "prompt_tokens": 349,
+    "completion_tokens": 67,
+    "total_tokens": 416,
+    "cached_tokens": 128,
+    "reasoning_tokens": 0,
+    "prompt_cache_hit_tokens": 128,
+    "prompt_cache_miss_tokens": 221
+   },
+   {
+    "prompt_tokens": 452,
+    "completion_tokens": 20,
+    "total_tokens": 472,
+    "cached_tokens": 256,
+    "reasoning_tokens": 0,
+    "prompt_cache_hit_tokens": 256,
+    "prompt_cache_miss_tokens": 196
+   }
+  ],
+  "latency_ms": 1866
+ }
+}

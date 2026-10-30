@@ -273,7 +273,9 @@ function AskTab({ d }: { d: DiagnosisResult }) {
             {a.steps.length === 0 && <li>未调用工具</li>}
           </ol>
           <VerifiedMarkdown text={annotatedOf(a)} refs={a.refs} code={d.profile.code} local={a.evidence} />
-          <VerificationBar v={a.verification} />
+          {a.ok === false
+            ? <div className="rounded bg-red-50 p-2 text-xs text-red-700">本次没有得到有效回答（模型调用失败或回答为空），不进行核验统计。</div>
+            : <VerificationBar v={a.verification} />}
           {a.warnings.map((w) => <div key={w} className="text-xs text-amber-700">{w}</div>)}
         </article>
       ))}

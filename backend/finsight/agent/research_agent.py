@@ -91,6 +91,8 @@ class AgentAnswer(BaseModel):
     usage: dict[str, int | float] = Field(default_factory=dict)
     warnings: list[str] = Field(default_factory=list)
     elapsed_ms: int = 0
+    # 是否得到了有效回答：模型调用失败或回答为空时为 False。注意空文本的核验结果 passed=True 没有意义，不能代表成功。
+    ok: bool = True
 
 
 class _Session:
@@ -331,7 +333,8 @@ class ResearchAgent:
         return AgentAnswer(question=question, answer=answer + note, annotated_answer=annotate(answer, v) + note,
                            refs={r: e.id for r, e in refs.items()}, evidence={e.id: e for e in refs.values()},
                            verification=v, steps=steps, attempts=attempts, model=getattr(self.llm, "model", None),
-                           usage=meter.as_dict(), warnings=warnings, elapsed_ms=int((time.monotonic() - started) * 1000))
+                           usage=meter.as_dict(), warnings=warnings, elapsed_ms=int((time.monotonic() - started) * 1000),
+                           ok=bool(answer.strip()) and attempts > 0)
 
 
 __all__ = ["ResearchAgent", "AgentAnswer", "AgentStep", "TOOLS", "KEY_METRICS"]
