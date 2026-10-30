@@ -21,6 +21,7 @@ from finsight.analytics.rules import DIMENSION_LABELS
 from finsight.data.schema import ITEMS
 from finsight.domain import Evidence, fmt_value
 from finsight.llm.gateway import LLMClient, LLMError, UsageMeter
+from finsight.reporting.report import _issues, data_asof
 from finsight.reporting.verifier import VerificationResult, annotate, verify
 
 SYSTEM_PROMPT = """你是 FinSight 研究助理，帮助专业投研人员分析一家 A 股上市公司的财务状况与风险。
@@ -31,7 +32,9 @@ SYSTEM_PROMPT = """你是 FinSight 研究助理，帮助专业投研人员分析
 3. 不要自行计算新数字（差值、增速、均值等）。需要的话先查找对应指标（增速、差值类指标都已提供）；查不到就用定性描述。
 4. 数据不足以回答时，直接说明缺少什么数据，不要猜测。不要使用工具结果以外的公司信息、行业数据或新闻。
 5. 不提供买入、卖出、增持、减持、持有或目标价等投资建议。
-6. 回答要简洁、结构清楚：先给结论，再列依据。"""
+6. 回答要简洁、结构清楚：先给结论，再列依据。
+7. 口径一致：引用比率时，若同一句还写了它的分子或分母，必须用该指标公式里的科目（例如净现比的分母是净利润，不是归母净利润）。
+8. 时效：数据只到最新年报期。用户问“目前/现在”时，要说明回答依据的是哪一期年报，不能代表此后的最新状况。"""
 
 
 def _tool(name: str, description: str, properties: dict[str, Any], required: list[str] | None = None) -> dict:
@@ -85,7 +88,7 @@ class AgentAnswer(BaseModel):
     steps: list[AgentStep]
     attempts: int = 1
     model: str | None = None
-    usage: dict[str, int] = Field(default_factory=dict)
+    usage: dict[str, int | float] = Field(default_factory=dict)
     warnings: list[str] = Field(default_factory=list)
     elapsed_ms: int = 0
 
@@ -263,7 +266,7 @@ class ResearchAgent:
         meter = UsageMeter()
         p = self.r.profile
         context = (f"当前公司：{p.name}（{p.code}.{p.exchange}），行业：{p.industry_em or '—'}，"
-                   f"可用年报期：{'、'.join(x[:4] for x in self.periods)}。")
+                   f"可用年报期：{'、'.join(x[:4] for x in self.periods)}；{data_asof(self.r)}。")
         messages: list[dict[str, Any]] = [{"role": "system", "content": SYSTEM_PROMPT},
                                           {"role": "user", "content": f"{context}\n\n问题：{question}"}]
         steps: list[AgentStep] = []
@@ -299,7 +302,7 @@ class ResearchAgent:
             attempts = 1
             while answer and not v.passed and attempts <= max_revisions:
                 problems = "\n".join(f"- “{c.text}”：{c.message}" for c in v.problems[:10])
-                flags = "\n".join(f"- 合规：{f}" for f in v.compliance_flags)
+                flags = "\n".join([f"- 合规：{f}" for f in v.compliance_flags] + [f"- {f}" for f in v.consistency_flags])
                 messages += [resp.as_message(),
                              {"role": "user", "content": "核验器发现以下问题，请修改后重新作答（数字必须来自已获取的证据并标注编号，"
                                                          f"否则删除；不要再调用工具）：\n{problems}\n{flags}"}]
@@ -312,11 +315,11 @@ class ResearchAgent:
                 attempts += 1
                 new_answer = resp.content.strip()
                 new_v = verify(new_answer, refs)
-                if new_answer and (len(new_v.problems) + len(new_v.compliance_flags)
-                                   <= len(v.problems) + len(v.compliance_flags)):
+                if new_answer and _issues(new_v) <= _issues(v):
                     answer, v = new_answer, new_v
             if v.problems:
                 warnings.append(f"仍有 {len(v.problems)} 个数字未通过核验，已在回答中标注")
+            warnings += v.consistency_flags
         except LLMError as exc:
             refs = self.s.refs_map()
             answer = f"大模型调用失败：{exc}"

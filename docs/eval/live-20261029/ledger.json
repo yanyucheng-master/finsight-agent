@@ -1,0 +1,377 @@
+{
+  "budget_cny": 8.0,
+  "user_cap_cny": 10,
+  "reserved_cny": 3.605764000000001,
+  "calls": [
+    {
+      "provider": "deepseek",
+      "model": "deepseek-flash",
+      "input_bytes_bound": 4297,
+      "max_output_tokens": 2048,
+      "reserved_cny": 0.049956,
+      "status": "completed",
+      "usage": {
+        "prompt_tokens": 35,
+        "completion_tokens": 17,
+        "total_tokens": 52,
+        "cached_tokens": 0,
+        "reasoning_tokens": 15,
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 35
+      },
+      "finish_reason": "stop",
+      "served_model": "deepseek-flash",
+      "active_reserve_cny": 0.000412
+    },
+    {
+      "provider": "deepseek",
+      "model": "deepseek-flash",
+      "input_bytes_bound": 4771,
+      "max_output_tokens": 6144,
+      "reserved_cny": 0.117388,
+      "status": "completed",
+      "usage": {
+        "prompt_tokens": 349,
+        "completion_tokens": 60,
+        "total_tokens": 409,
+        "cached_tokens": 0,
+        "reasoning_tokens": 0,
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 349
+      },
+      "finish_reason": "tool_calls",
+      "served_model": "deepseek-flash",
+      "active_reserve_cny": 0.002356
+    },
+    {
+      "provider": "deepseek",
+      "model": "deepseek-flash",
+      "input_bytes_bound": 5163,
+      "max_output_tokens": 6144,
+      "reserved_cny": 0.118956,
+      "status": "completed",
+      "usage": {
+        "prompt_tokens": 445,
+        "completion_tokens": 29,
+        "total_tokens": 474,
+        "cached_tokens": 256,
+        "reasoning_tokens": 7,
+        "prompt_cache_hit_tokens": 256,
+        "prompt_cache_miss_tokens": 189
+      },
+      "finish_reason": "stop",
+      "served_model": "deepseek-flash",
+      "active_reserve_cny": 0.002244
+    },
+    {
+      "provider": "kimi",
+      "model": "kimi-k3.1-pro",
+      "input_bytes_bound": 4243,
+      "max_output_tokens": 2048,
+      "reserved_cny": 0.388846,
+      "status": "completed",
+      "usage": {
+        "prompt_tokens": 91,
+        "completion_tokens": 29,
+        "total_tokens": 120,
+        "reasoning_tokens": 13,
+        "cache_write_tokens": 0
+      },
+      "finish_reason": "stop",
+      "served_model": "kimi-k3.1-pro",
+      "active_reserve_cny": 0.00631
+    },
+    {
+      "provider": "kimi",
+      "model": "kimi-k3.1-pro",
+      "input_bytes_bound": 4717,
+      "max_output_tokens": 6144,
+      "reserved_cny": 0.958226,
+      "status": "completed",
+      "usage": {
+        "prompt_tokens": 211,
+        "completion_tokens": 119,
+        "total_tokens": 330,
+        "reasoning_tokens": 50,
+        "cache_write_tokens": 0
+      },
+      "finish_reason": "tool_calls",
+      "served_model": "kimi-k3.1-pro",
+      "active_reserve_cny": 0.02167
+    },
+    {
+      "provider": "kimi",
+      "model": "kimi-k3.1-pro",
+      "input_bytes_bound": 5347,
+      "max_output_tokens": 6144,
+      "reserved_cny": 0.974606,
+      "status": "completed",
+      "usage": {
+        "prompt_tokens": 381,
+        "completion_tokens": 53,
+        "total_tokens": 434,
+        "reasoning_tokens": 22,
+        "cache_write_tokens": 256
+      },
+      "finish_reason": "stop",
+      "served_model": "kimi-k3.1-pro",
+      "active_reserve_cny": 0.017114
+    },
+    {
+      "provider": "kimi",
+      "model": "kimi-k3.1-pro",
+      "input_bytes_bound": 21372,
+      "max_output_tokens": 6144,
+      "reserved_cny": 1.391256,
+      "status": "completed",
+      "usage": {
+        "prompt_tokens": 5459,
+        "completion_tokens": 2329,
+        "total_tokens": 7788,
+        "reasoning_tokens": 1130,
+        "cache_write_tokens": 5376
+      },
+      "finish_reason": "stop",
+      "served_model": "kimi-k3.1-pro",
+      "active_reserve_cny": 0.458678
+    },
+    {
+      "provider": "kimi",
+      "model": "kimi-k3.1-pro",
+      "input_bytes_bound": 31468,
+      "max_output_tokens": 6144,
+      "reserved_cny": 1.653752,
+      "status": "completed",
+      "usage": {
+        "prompt_tokens": 8074,
+        "completion_tokens": 1193,
+        "total_tokens": 9267,
+        "cached_tokens": 5376,
+        "reasoning_tokens": 35,
+        "prompt_tokens_details.cached_tokens": 5376,
+        "cache_write_tokens": 2560
+      },
+      "finish_reason": "stop",
+      "served_model": "kimi-k3.1-pro",
+      "active_reserve_cny": 0.372172
+    },
+    {
+      "provider": "kimi",
+      "model": "kimi-k3.1-pro",
+      "input_bytes_bound": 23211,
+      "max_output_tokens": 6144,
+      "reserved_cny": 1.43907,
+      "status": "completed",
+      "usage": {
+        "prompt_tokens": 5912,
+        "completion_tokens": 2137,
+        "total_tokens": 8049,
+        "cached_tokens": 256,
+        "reasoning_tokens": 940,
+        "prompt_tokens_details.cached_tokens": 256,
+        "cache_write_tokens": 5632
+      },
+      "finish_reason": "stop",
+      "served_model": "kimi-k3.1-pro",
+      "active_reserve_cny": 0.444344
+    },
+    {
+      "provider": "kimi",
+      "model": "kimi-k3.1-pro",
+      "input_bytes_bound": 23211,
+      "max_output_tokens": 6144,
+      "reserved_cny": 1.43907,
+      "status": "completed",
+      "usage": {
+        "prompt_tokens": 5912,
+        "completion_tokens": 1943,
+        "total_tokens": 7855,
+        "cached_tokens": 5888,
+        "reasoning_tokens": 757,
+        "prompt_tokens_details.cached_tokens": 5888,
+        "cache_write_tokens": 0
+      },
+      "finish_reason": "stop",
+      "served_model": "kimi-k3.1-pro",
+      "active_reserve_cny": 0.41796
+    },
+    {
+      "provider": "kimi",
+      "model": "kimi-k3.1-pro",
+      "input_bytes_bound": 32322,
+      "max_output_tokens": 6144,
+      "reserved_cny": 1.675956,
+      "status": "completed",
+      "usage": {
+        "prompt_tokens": 8141,
+        "completion_tokens": 1225,
+        "total_tokens": 9366,
+        "cached_tokens": 5888,
+        "reasoning_tokens": 65,
+        "prompt_tokens_details.cached_tokens": 5888,
+        "cache_write_tokens": 2048
+      },
+      "finish_reason": "stop",
+      "served_model": "kimi-k3.1-pro",
+      "active_reserve_cny": 0.378266
+    },
+    {
+      "provider": "kimi",
+      "model": "kimi-k3.1-pro",
+      "input_bytes_bound": 22688,
+      "max_output_tokens": 6144,
+      "reserved_cny": 1.425472,
+      "status": "completed",
+      "usage": {
+        "prompt_tokens": 5764,
+        "completion_tokens": 2577,
+        "total_tokens": 8341,
+        "cached_tokens": 256,
+        "reasoning_tokens": 1303,
+        "prompt_tokens_details.cached_tokens": 256,
+        "cache_write_tokens": 5376
+      },
+      "finish_reason": "stop",
+      "served_model": "kimi-k3.1-pro",
+      "active_reserve_cny": 0.500336
+    },
+    {
+      "provider": "kimi",
+      "model": "kimi-k3.1-pro",
+      "input_bytes_bound": 34017,
+      "max_output_tokens": 6144,
+      "reserved_cny": 1.720026,
+      "status": "completed",
+      "usage": {
+        "prompt_tokens": 8627,
+        "completion_tokens": 1277,
+        "total_tokens": 9904,
+        "cached_tokens": 5632,
+        "reasoning_tokens": 44,
+        "prompt_tokens_details.cached_tokens": 5632,
+        "cache_write_tokens": 2816
+      },
+      "finish_reason": "stop",
+      "served_model": "kimi-k3.1-pro",
+      "active_reserve_cny": 0.397974
+    },
+    {
+      "provider": "kimi",
+      "model": "kimi-k3.1-pro",
+      "input_bytes_bound": 8398,
+      "max_output_tokens": 6144,
+      "reserved_cny": 1.053932,
+      "status": "completed",
+      "usage": {
+        "prompt_tokens": 973,
+        "completion_tokens": 188,
+        "total_tokens": 1161,
+        "reasoning_tokens": 104,
+        "cache_write_tokens": 768
+      },
+      "finish_reason": "tool_calls",
+      "served_model": "kimi-k3.1-pro",
+      "active_reserve_cny": 0.050866
+    },
+    {
+      "provider": "kimi",
+      "model": "kimi-k3.1-pro",
+      "input_bytes_bound": 11455,
+      "max_output_tokens": 6144,
+      "reserved_cny": 1.133414,
+      "status": "completed",
+      "usage": {
+        "prompt_tokens": 1687,
+        "completion_tokens": 156,
+        "total_tokens": 1843,
+        "cached_tokens": 768,
+        "reasoning_tokens": 28,
+        "prompt_tokens_details.cached_tokens": 768,
+        "cache_write_tokens": 768
+      },
+      "finish_reason": "tool_calls",
+      "served_model": "kimi-k3.1-pro",
+      "active_reserve_cny": 0.065078
+    },
+    {
+      "provider": "kimi",
+      "model": "kimi-k3.1-pro",
+      "input_bytes_bound": 12995,
+      "max_output_tokens": 6144,
+      "reserved_cny": 1.173454,
+      "status": "completed",
+      "usage": {
+        "prompt_tokens": 2154,
+        "completion_tokens": 325,
+        "total_tokens": 2479,
+        "cached_tokens": 1536,
+        "reasoning_tokens": 100,
+        "prompt_tokens_details.cached_tokens": 1536,
+        "cache_write_tokens": 512
+      },
+      "finish_reason": "stop",
+      "served_model": "kimi-k3.1-pro",
+      "active_reserve_cny": 0.100204
+    },
+    {
+      "provider": "kimi",
+      "model": "kimi-k3.1-pro",
+      "input_bytes_bound": 8375,
+      "max_output_tokens": 6144,
+      "reserved_cny": 1.053334,
+      "status": "completed",
+      "usage": {
+        "prompt_tokens": 970,
+        "completion_tokens": 243,
+        "total_tokens": 1213,
+        "cached_tokens": 768,
+        "reasoning_tokens": 79,
+        "prompt_tokens_details.cached_tokens": 768,
+        "cache_write_tokens": 0
+      },
+      "finish_reason": "tool_calls",
+      "served_model": "kimi-k3.1-pro",
+      "active_reserve_cny": 0.058268
+    },
+    {
+      "provider": "kimi",
+      "model": "kimi-k3.1-pro",
+      "input_bytes_bound": 16218,
+      "max_output_tokens": 6144,
+      "reserved_cny": 1.257252,
+      "status": "completed",
+      "usage": {
+        "prompt_tokens": 3148,
+        "completion_tokens": 204,
+        "total_tokens": 3352,
+        "cached_tokens": 768,
+        "reasoning_tokens": 112,
+        "prompt_tokens_details.cached_tokens": 768,
+        "cache_write_tokens": 2304
+      },
+      "finish_reason": "tool_calls",
+      "served_model": "kimi-k3.1-pro",
+      "active_reserve_cny": 0.109592
+    },
+    {
+      "provider": "kimi",
+      "model": "kimi-k3.1-pro",
+      "input_bytes_bound": 20953,
+      "max_output_tokens": 6144,
+      "reserved_cny": 1.380362,
+      "status": "completed",
+      "usage": {
+        "prompt_tokens": 4544,
+        "completion_tokens": 616,
+        "total_tokens": 5160,
+        "cached_tokens": 3072,
+        "reasoning_tokens": 235,
+        "prompt_tokens_details.cached_tokens": 3072,
+        "cache_write_tokens": 1280
+      },
+      "finish_reason": "stop",
+      "served_model": "kimi-k3.1-pro",
+      "active_reserve_cny": 0.20192
+    }
+  ]
+}

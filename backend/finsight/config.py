@@ -74,6 +74,19 @@ LLM_PROVIDERS: dict[str, dict[str, str | int]] = {
 
 REASONING_EFFORTS = ("none", "low", "high", "max")
 
+# 公开标价（元 / 百万 token：缓存命中输入、未命中输入、输出），不含税；用于费用估算与预算保护，实际以账单为准。
+# Kimi：https://www.kimi.com/resources/kimi-k3-1-pro-pricing（2026-10-30 核对）
+# DeepSeek：https://api-docs.deepseek.com/zh-cn/quick_start/pricing （取高峰时段价格，偏保守）
+LLM_PRICES_CNY: dict[str, tuple[float, float, float]] = {
+    "kimi-k3.1-pro": (1.30, 13.00, 68.00),
+    "kimi-k3.1-pro-highspeed": (1.30, 26.00, 136.00),
+    "kimi-k3": (2.00, 20.00, 100.00),
+    "deepseek-flash": (0.04, 2.00, 8.00),
+    "deepseek-v4-pro": (0.30, 9.00, 27.00),
+}
+# 未知模型按最贵的已知价格估算，保证预算保护偏保守
+FALLBACK_PRICE_CNY = (2.00, 26.00, 136.00)
+
 
 @dataclass(frozen=True)
 class LLMSettings:

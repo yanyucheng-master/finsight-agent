@@ -141,3 +141,25 @@ def test_llm_check_runs_tool_roundtrip_with_reasoning_passback(monkeypatch, tmp_
     assert rep["tool_roundtrip"]["passed"] and "api_key" not in json.dumps(rep)
     assert fake.requests[2]["messages"][1]["reasoning_content"] == "先调用工具"
     assert fake.requests[2]["messages"][2]["role"] == "tool"
+
+
+def test_budget_guard_blocks_requests_that_could_exceed_budget(monkeypatch):
+    import finsight.llm.gateway as gw
+
+    monkeypatch.setattr(gw, "BUDGET", gw.BudgetGuard())
+    monkeypatch.setenv("LLM_BUDGET_CNY", "0.5")
+    rec = Recorder((200, ok({"content": "好"}, usage={"prompt_tokens": 1000, "completion_tokens": 1000})))
+    c = client(rec, provider="kimi", model="kimi-k3.1-pro")
+    c.chat([{"role": "user", "content": "hi"}], max_tokens=1000)  # 预留约 0.07 元
+    assert abs(gw.BUDGET.spent - (1000 * 13 + 1000 * 68) / 1e6) < 1e-9
+    with pytest.raises(LLMError, match="费用保护"):
+        c.chat([{"role": "user", "content": "hi"}], max_tokens=32768)  # 最多 2.2 元，超预算
+    assert len(rec.payloads) == 1  # 被拒绝的请求没有发出
+
+
+def test_cost_estimate_uses_cache_hits():
+    from finsight.llm.gateway import estimate_cost_cny
+
+    cost = estimate_cost_cny("deepseek-flash", {"prompt_tokens": 1000, "prompt_cache_hit_tokens": 400,
+                                                "completion_tokens": 100})
+    assert abs(cost - (400 * 0.04 + 600 * 2 + 100 * 8) / 1e6) < 1e-12

@@ -6,6 +6,7 @@
 """
 import argparse
 import json
+import os
 import sys
 import time
 import traceback
@@ -47,7 +48,9 @@ class Tee:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--provider", default="deepseek")
+    ap.add_argument("--budget", type=float, default=5.0, help="本次运行的费用上限（元，客户端估算），0 表示不限")
     args = ap.parse_args()
+    os.environ["LLM_BUDGET_CNY"] = str(args.budget)
     RUNS.mkdir(parents=True, exist_ok=True)
     log = open(RUNS / "smoke_console.log", "w", encoding="utf-8")
     sys.stdout = Tee(sys.__stdout__, log)
@@ -72,12 +75,18 @@ def run(provider: str) -> int:
     from finsight.llm.gateway import make_client
     from finsight.reporting.report import generate_report
 
+    from finsight.llm.gateway import BUDGET
+
+    failures: list[str] = []
     cfg = llm_settings(provider)
     summary = {"provider": provider, "config": cfg.public(), "started": time.strftime("%Y-%m-%d %H:%M:%S"),
                "checks": {}, "items": []}
     print("\n== 1/3 连通性检查（对话 + 工具调用往返）==")
     for prov in ("deepseek", "kimi"):
-        summary["checks"][prov] = "通过" if cli_main(["llm-check", "--provider", prov]) == 0 else "未通过"
+        passed = cli_main(["llm-check", "--provider", prov]) == 0
+        summary["checks"][prov] = "通过" if passed else "未通过"
+        if not passed:
+            failures.append(f"{prov} 连通性检查未通过")
 
     if not cfg.enabled:
         print(f"未配置 {provider} 的 Key，跳过后续步骤（请先运行 scripts\\setup_env.bat）")
@@ -101,8 +110,13 @@ def run(provider: str) -> int:
             line = (f"简报 {code}：模式 {rep.mode}，尝试 {rep.attempts} 次，数字 {v.total} 个，通过 {v.verified}，"
                     f"无证据 {v.unverified}，不一致 {v.mismatch}，耗时 {rep.elapsed_ms} ms，用量 {rep.usage}"
                     + (f"，警告 {rep.warnings}" if rep.warnings else ""))
+            if rep.mode != "llm":
+                failures.append(f"简报 {code} 降级为模板")
+            elif not v.passed:
+                failures.append(f"简报 {code} 仍有未通过核验的内容")
         except Exception as exc:
             line = f"简报 {code} 失败：{exc}"
+            failures.append(line)
             traceback.print_exc()
         print(line)
         summary["items"].append(line)
@@ -117,16 +131,26 @@ def run(provider: str) -> int:
             line = (f"问答 {i}（{code}）：工具调用 {len(ans.steps)} 次，数字 {v.total} 个，通过 {v.verified}，"
                     f"无证据 {v.unverified}，不一致 {v.mismatch}，耗时 {ans.elapsed_ms} ms，用量 {ans.usage}"
                     + (f"，警告 {ans.warnings}" if ans.warnings else ""))
+            if ans.attempts == 0 or not ans.answer:
+                failures.append(f"问答 {i} 调用失败")
+            elif not v.passed:
+                failures.append(f"问答 {i} 仍有未通过核验的内容")
         except Exception as exc:
             line = f"问答 {i} 失败：{exc}"
+            failures.append(line)
             traceback.print_exc()
         print(line)
         summary["items"].append(line)
 
     summary["finished"] = time.strftime("%Y-%m-%d %H:%M:%S")
+    summary["cost_cny_est"] = round(BUDGET.spent, 6)
+    summary["budget_cny"] = BUDGET.limit
+    summary["failures"] = failures
     (RUNS / "smoke_summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=1), encoding="utf-8")
-    print("\n完成，结果在", RUNS)
-    return 0
+    print(f"\n估算费用 {BUDGET.spent:.4f} 元（{BUDGET.calls} 次请求，按公开标价、不含税，实际以控制台账单为准）")
+    print("未通过项：" + ("；".join(failures) if failures else "无"))
+    print("完成，结果在", RUNS)
+    return 1 if failures else 0
 
 
 if __name__ == "__main__":

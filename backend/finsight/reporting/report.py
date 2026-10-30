@@ -20,7 +20,7 @@ from finsight.llm.gateway import LLMClient, LLMError, UsageMeter
 from finsight.reporting.verifier import VerificationResult, annotate, verify
 
 SEV_LABEL = {"high": "高", "medium": "中", "low": "低", "info": "提示"}
-CORE_FACTS = ("is.revenue", "is.np_parent", "is.np_deducted", "cf.ocf", "bs.total_assets", "bs.total_liabilities",
+CORE_FACTS = ("is.revenue", "is.net_profit", "is.np_parent", "is.np_deducted", "cf.ocf", "bs.total_assets", "bs.total_liabilities",
               "bs.cash")
 
 
@@ -43,7 +43,7 @@ class Report(BaseModel):
     verification: VerificationResult
     attempts: int = 1
     revised: bool = False
-    usage: dict[str, int] = Field(default_factory=dict)
+    usage: dict[str, int | float] = Field(default_factory=dict)
     warnings: list[str] = Field(default_factory=list)
     generated_at: str
     elapsed_ms: int = 0
@@ -88,7 +88,8 @@ def build_context(result: DiagnosisResult, years: int = 3) -> ReportContext:
     lines = []
     for ref, e in refs.items():
         year = f"{e.period[:4]}年 " if e.period and re.match(r"\d{4}", e.period) else ""
-        formula = f"（公式：{e.formula}）" if e.formula else ""
+        parts = [id_to_ref[i] for i in e.inputs if i in id_to_ref]
+        formula = (f"（公式：{e.formula}" + (f"；所用科目：{'、'.join(parts)}" if parts else "") + "）") if e.formula else ""
         lines.append(f"[{ref}] {year}{e.label} = {fmt_value(e.value, e.unit)}{formula}")
 
     def cite(text: str) -> str:
@@ -103,6 +104,7 @@ def build_context(result: DiagnosisResult, years: int = 3) -> ReportContext:
     p = result.profile
     latest = result.periods[0].end[:4] if result.periods else "—"
     header = (f"公司：{p.name}（{p.code}.{p.exchange}），行业：{p.industry_em or '—'}，最新年报期：{latest}年；"
+              f"{data_asof(result)}；"
               f"系统综合风险评级：{result.overall.level}（{result.overall.headline}）。评级规则：{result.overall.rule}")
     return ReportContext(refs=refs, id_to_ref=id_to_ref, evidence_block="\n".join(lines),
                          signals_block="\n".join(sig_lines) or "（无）", header=header)
@@ -141,7 +143,7 @@ def template_report(result: DiagnosisResult, ctx: ReportContext) -> str:
     out += todo or ["- 跟踪下一期定期报告，确认各项指标趋势是否延续。"]
     out.append("\n## 数据与方法说明")
     out.append("本简报由 FinSight 确定性引擎生成：数据取自公开披露渠道的原始快照，指标与模型按公开公式计算，"
-               "每个数字均可通过引用编号溯源。模型结论为排查线索，不构成投资建议。")
+               f"每个数字均可通过引用编号溯源；{data_asof(result)}。模型结论为排查线索，不构成投资建议。")
     return "\n".join(out)
 
 
@@ -155,18 +157,37 @@ SYSTEM_PROMPT = """你是一名严谨的证券研究分析师，为专业投研�
 3. 年份写作“2025年”，不需要引用。不要写证据清单以外的公司事实、行业数据、新闻或股价。
 4. 区分事实与判断：判断要给出依据（引用证据）；预警模型的结论只能表述为“提示/线索”，不能写成定论。
 5. 不提供任何买入、卖出、增持、减持、持有或目标价等投资建议。
+6. 口径一致：引用比率时，若同一句还写了它的分子或分母，必须写证据清单“所用科目”里的那个科目（例如净现比的分母是净利润，不是归母净利润）。
+7. 时效：所有数据截至最新年报期，不要写“目前”“当前”而不注明报告期。
 
-输出 Markdown，结构固定为五节：
-## 核心结论（不超过 3 句）
-## 主要风险（按严重程度排序，每条 1–3 句）
+输出 Markdown，固定使用以下五个二级标题（标题文字照抄，不要在标题里加括号说明）：
+## 核心结论
+## 主要风险
 ## 积极因素
-## 建议进一步核实的事项（给研究员的待办，3–5 条，说明要查阅的资料）
-## 数据与方法说明（1–2 句）"""
+## 建议进一步核实的事项
+## 数据与方法说明
+
+写作要求：核心结论不超过三句；主要风险按严重程度排序，每条一到三句；待核实事项写给研究员，三到五条，说明要查阅的资料；数据与方法说明一到两句，并注明数据截至的报告期。"""
 
 
 def _user_prompt(ctx: ReportContext) -> str:
     return (f"{ctx.header}\n\n【风险信号】（规则引擎输出，括号内为依据）\n{ctx.signals_block}\n\n"
             f"【证据清单】\n{ctx.evidence_block}\n\n请按要求撰写研究简报。")
+
+
+def _issues(v: VerificationResult) -> int:
+    return len(v.problems) + len(v.compliance_flags) + len(v.consistency_flags)
+
+
+def data_asof(result: DiagnosisResult) -> str:
+    """数据时效说明：最新报告期、公告日、快照采集时间（取自证据的 SourceRef）。"""
+    if not result.periods:
+        return "数据时效未知"
+    end = result.periods[0].end
+    src = next((e.source for e in result.evidence.values() if e.source and e.period == end), None)
+    notice = f"，公告日 {src.notice_date}" if src and src.notice_date else ""
+    fetched = f"，快照采集于 {src.fetched_at[:10]}" if src and src.fetched_at else ""
+    return f"数据截至 {end} 年报{notice}{fetched}，不代表此后的最新状况"
 
 
 def _revision_prompt(v: VerificationResult) -> str:
@@ -176,6 +197,8 @@ def _revision_prompt(v: VerificationResult) -> str:
         lines.append(f"{i}. “{c.text}”（所在句：{where}）：{c.message}")
     for f in v.compliance_flags:
         lines.append(f"- 合规：{f}，请删除。")
+    for f in v.consistency_flags:
+        lines.append(f"- {f}。")
     return ("核验器发现以下问题。请输出修改后的完整报告：数字要么改为证据清单中的数值并引用编号，要么删除；"
             "其余内容保持不变，并继续遵守全部规则。\n" + "\n".join(lines))
 
@@ -218,11 +241,11 @@ def generate_report(result: DiagnosisResult, *, llm: LLMClient | None = None, mo
                 new_text = resp.content.strip()
                 new_v = verify(new_text, ctx.refs)
                 # 只有修订确实减少了问题、且没有变成空文本才采用（防止越改越差）
-                if new_text and (len(new_v.problems) + len(new_v.compliance_flags)
-                                 <= len(v.problems) + len(v.compliance_flags)):
+                if new_text and _issues(new_v) <= _issues(v):
                     text, v, revised = new_text, new_v, True
             if v.problems:
                 warnings.append(f"仍有 {len(v.problems)} 个数字未通过核验，已在文中标注")
+            warnings += v.consistency_flags
             return Report(code=result.profile.code, name=result.profile.name, mode="llm",
                           model=getattr(llm, "model", None), markdown=text, annotated_markdown=annotate(text, v),
                           refs=refs_public, verification=v, attempts=attempts, revised=revised,

@@ -25,6 +25,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from finsight.domain import Evidence, fmt_value
+from finsight.reporting.consistency import check_consistency
 
 ClaimStatus = Literal["verified", "unattributed", "mismatch", "invalid_ref", "unverified"]
 
@@ -36,6 +37,8 @@ NUM_RE = re.compile(
 # 不视为断言数字的上下文
 YEAR_RE = re.compile(r"^(19|20)\d{2}$")
 SKIP_AFTER = re.compile(r"^\s*(年|月|日|季度|季|月份|期|家|条|项|个(?!百分点)|名|位|次|号|章|节|款|级|类|种|大|小时|分钟|秒)")
+# 写作格式计数（“1–3 句”“3-5 条”），不是财务断言；模型偶尔会把提示词里的格式要求抄进标题
+FORMAT_COUNT = re.compile(r"^\s*(?:[–—\-~～至到]\s*\d+\s*)?(句|段|点|字|行|条|项|节)")
 DATE_RE = re.compile(r"\d{4}[-/.]\d{1,2}[-/.]\d{1,2}")
 ADVICE_RE = re.compile(r"(建议|推荐|可以|应当|宜)\s*(买入|卖出|增持|减持|持有|抄底|加仓|减仓)|目标价|买入评级|卖出评级")
 
@@ -67,6 +70,7 @@ class VerificationResult(BaseModel):
     verifiable_rate: float  # (verified + unattributed) / total
     citation_rate: float  # verified / total
     compliance_flags: list[str] = Field(default_factory=list)
+    consistency_flags: list[str] = Field(default_factory=list)  # 口径提示（见 consistency.py）
 
     @property
     def problems(self) -> list[Claim]:
@@ -74,7 +78,7 @@ class VerificationResult(BaseModel):
 
     @property
     def passed(self) -> bool:
-        return not self.problems and not self.compliance_flags
+        return not self.problems and not self.compliance_flags and not self.consistency_flags
 
 
 @dataclass
@@ -192,8 +196,14 @@ def verify(text: str, refs: dict[str, Evidence]) -> VerificationResult:
             continue
         if not unit and SKIP_AFTER.match(mtext[m.end():m.end() + 3]):
             continue
+        if not unit and FORMAT_COUNT.match(mtext[m.end():m.end() + 8]):
+            continue
         line_start = mtext.rfind("\n", 0, m.start()) + 1
         prefix = mtext[line_start:m.start()].strip()
+        line_end = mtext.find("\n", m.end())
+        rest_of_line = mtext[m.end():line_end if line_end != -1 else len(mtext)]
+        if not unit and prefix.startswith("#") and "§" not in rest_of_line:
+            continue  # 标题中无单位、无引用的数字（如“前 3 大风险”）不是财务断言
         if not unit and prefix in ("", "-", "*", "#", "##", "###") and mtext[m.end():m.end() + 1] in (".", "、", ")", "）"):
             continue
         if not unit and "." not in raw and float(raw) < 10 and re.search(r"(第|前|近|共|约)\s*$", mtext[max(0, m.start() - 3):m.start()]):
@@ -252,6 +262,7 @@ def verify(text: str, refs: dict[str, Evidence]) -> VerificationResult:
         verifiable_rate=((count["verified"] + count["unattributed"]) / total) if total else 1.0,
         citation_rate=(count["verified"] / total) if total else 1.0,
         compliance_flags=flags,
+        consistency_flags=check_consistency(text, refs),
     )
 
 
@@ -260,4 +271,6 @@ def annotate(text: str, result: VerificationResult) -> str:
     out = text
     for c in sorted(result.problems, key=lambda c: c.start, reverse=True):
         out = out[:c.end] + "⚠️〔未核验〕" + out[c.end:]
+    if result.consistency_flags:
+        out += "\n\n" + "\n".join(f"> ⚠️ {f}" for f in result.consistency_flags)
     return out
