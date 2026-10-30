@@ -21,6 +21,7 @@ from finsight.analytics.rules import DIMENSION_LABELS
 from finsight.data.schema import ITEMS
 from finsight.domain import Evidence, fmt_value
 from finsight.llm.gateway import LLMClient, LLMError, UsageMeter
+from finsight.progress import Progress, emit
 from finsight.reporting.report import _issues, data_asof
 from finsight.reporting.verifier import VerificationResult, annotate, verify
 
@@ -263,7 +264,7 @@ class ResearchAgent:
                          latency_ms=int((time.monotonic() - t0) * 1000), error=err)
         return text, step
 
-    def ask(self, question: str, *, max_revisions: int = 1) -> AgentAnswer:
+    def ask(self, question: str, *, max_revisions: int = 1, progress: Progress | None = None) -> AgentAnswer:
         started = time.monotonic()
         meter = UsageMeter()
         p = self.r.profile
@@ -278,7 +279,8 @@ class ResearchAgent:
             # 说明：后续请求始终带同一份 TOOLS（不需要工具时用 tool_choice="none"），
             # 既符合“历史中有工具调用”的接口约束，也让提示前缀保持不变、提高缓存命中。
             # 每条 assistant 消息都用 resp.as_message() 原样回传（推理模型要求带 reasoning_content）。
-            for _ in range(self.max_steps):
+            for step_no in range(1, self.max_steps + 1):
+                emit(progress, "thinking", f"第 {step_no} 步：模型思考中")
                 resp = self.llm.chat(messages, tools=TOOLS)
                 meter.add(resp)
                 if not resp.tool_calls:
@@ -288,6 +290,7 @@ class ResearchAgent:
                 for tc in resp.tool_calls:
                     text, step = self._execute(tc.name, tc.arguments)
                     steps.append(step)
+                    emit(progress, "tool", f"调用工具 {tc.name}：{step.summary}")
                     messages.append({"role": "tool", "tool_call_id": tc.id, "content": text})
             else:
                 warnings.append(f"达到最大工具调用步数 {self.max_steps}，已要求模型直接作答")
@@ -301,8 +304,10 @@ class ResearchAgent:
                 warnings.append("模型输出达到长度上限，回答可能不完整")
             refs = self.s.refs_map()
             v = verify(answer, refs)
+            emit(progress, "verifying", f"核验 {v.total} 个数字，{len(v.problems)} 个有问题")
             attempts = 1
             while answer and not v.passed and attempts <= max_revisions:
+                emit(progress, "revising", f"核验发现 {_issues(v)} 处问题，请模型修订（第 {attempts} 次）")
                 problems = "\n".join(f"- “{c.text}”：{c.message}" for c in v.problems[:10])
                 flags = "\n".join([f"- 合规：{f}" for f in v.compliance_flags] + [f"- {f}" for f in v.consistency_flags])
                 messages += [resp.as_message(),

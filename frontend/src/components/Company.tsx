@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
-import { api } from "../api";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { api, waitJob } from "../api";
 import { fmtValue, LEVEL_STYLE, sevOf, THRESHOLD_TYPE, year } from "../format";
-import type { AgentAnswer, DiagnosisResult, MetricRow, Report, Signal } from "../types";
+import type { AgentAnswer, DemoStatus, DiagnosisResult, JobStatus, MetricRow, Report, SampleMeta, Signal } from "../types";
 import { Cite, CitedText, useEvidence } from "./Evidence";
+import { CachedBadge, JobProgress, LiveQuota } from "./Progress";
 import { TrendChart } from "./TrendChart";
 import { VerificationBar, VerifiedMarkdown } from "./Verified";
 
@@ -171,34 +172,108 @@ function RiskTab({ d }: { d: DiagnosisResult }) {
   );
 }
 
+// ---------------------------------------------------------------- 在线演示：额度与缓存样例
+
+function useDemo() {
+  const [demo, setDemo] = useState<DemoStatus | null>(null);
+  const refresh = useCallback(() => { api.demo().then(setDemo).catch(() => undefined); }, []);
+  useEffect(refresh, [refresh]);
+  const quota = demo?.live;
+  const canLive = !!demo?.llm_enabled && quota?.per_ip_remaining !== 0 && quota?.daily_remaining !== 0;
+  return { demo, refresh, canLive };
+}
+
+function useSamples(code: string, kind: "report" | "ask") {
+  const [list, setList] = useState<SampleMeta[]>([]);
+  useEffect(() => {
+    api.samples().then((all) => setList(all.filter((x) => x.code === code && x.kind === kind))).catch(() => setList([]));
+  }, [code, kind]);
+  return list;
+}
+
+function useAlive() {
+  const alive = useRef(true);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+  return alive;
+}
+
 // ---------------------------------------------------------------- 研究简报
 
 function BriefTab({ d }: { d: DiagnosisResult }) {
+  const code = d.profile.code;
+  const alive = useAlive();
+  const { demo, refresh, canLive } = useDemo();
+  const samples = useSamples(code, "report");
   const [rep, setRep] = useState<Report | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
+  const [cached, setCached] = useState<SampleMeta | null>(null);
+  const [job, setJob] = useState<JobStatus | null>(null);
+  const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const run = (mode: "llm" | "template") => {
-    setBusy(mode); setErr(null);
-    api.report(d.profile.code, mode).then(setRep).catch((e) => setErr(String(e.message ?? e))).finally(() => setBusy(null));
+  const autoOpened = useRef(false);
+  const touched = useRef(false); // 用户已经自己点过按钮：不要再用样例覆盖他的操作
+
+  const run = async (mode: "llm" | "template") => {
+    touched.current = true;
+    // 开始新的生成前先清掉旧结果：否则缓存样例会在进度条下面冒充“正在生成的结果”
+    setBusy(true); setErr(null); setCached(null); setRep(null); setJob(null);
+    try {
+      const start = await api.startReport(code, mode);
+      const out = await waitJob<Report>(start, (j) => { if (alive.current) setJob(j); }, () => !alive.current);
+      if (alive.current) { setRep(out); setCached(null); }
+    } catch (e) {
+      if (alive.current) setErr(String((e as Error).message ?? e));
+    } finally {
+      if (alive.current) { setBusy(false); setJob(null); refresh(); }
+    }
   };
+  const open = useCallback(async (s: SampleMeta) => {
+    touched.current = true;
+    setBusy(true); setErr(null); setJob(null);
+    try {
+      const full = await api.sample<Report>(s.id);
+      if (alive.current) { setRep(full.result); setCached(s); }
+    } catch (e) {
+      if (alive.current) setErr(String((e as Error).message ?? e));
+    } finally {
+      if (alive.current) setBusy(false);
+    }
+  }, [alive]);
+  // 有缓存样例时直接打开：评委进来就能看到完整的、核验过的简报，不用等
+  useEffect(() => {
+    if (samples.length && !autoOpened.current && !touched.current) { autoOpened.current = true; void open(samples[0]); }
+  }, [samples, open]);
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-white p-4 shadow-sm">
-        <div className="mr-auto text-sm text-slate-600">
+        <div className="mr-auto min-w-[16rem] flex-1 text-sm text-slate-600">
           大模型只能使用带编号的证据撰写简报；核验器逐个比对其中的数字，不一致或无出处的会被打回修订，仍不合格的在文中标红。
         </div>
-        <button disabled={!!busy} onClick={() => run("llm")}
-          className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60">
-          {busy === "llm" ? "生成与核验中…" : "AI 生成简报"}
+        {samples.map((s) => (
+          <button key={s.id} disabled={busy} onClick={() => open(s)}
+            className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900 hover:bg-amber-100 disabled:opacity-60">
+            查看 AI 样例（秒开）
+          </button>
+        ))}
+        <button disabled={busy || !canLive} onClick={() => run("llm")}
+          title={canLive ? "调用大模型现场生成，约 0.5–2 分钟" : "实时生成不可用：未配置 Key 或今日额度已用完"}
+          className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50">
+          {busy && job?.live ? "生成与核验中…" : "AI 实时生成简报"}
         </button>
-        <button disabled={!!busy} onClick={() => run("template")}
+        <button disabled={busy} onClick={() => run("template")}
           className="rounded-lg border px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-60">
-          {busy === "template" ? "生成中…" : "模板简报（无需大模型）"}
+          模板简报（无需大模型）
         </button>
+        <div className="basis-full text-right">
+          <LiveQuota enabled={!!demo?.llm_enabled} limited={!!demo?.live.limited}
+            remaining={demo?.live.per_ip_remaining ?? demo?.live.daily_remaining} />
+        </div>
       </div>
+      {job && <JobProgress job={job} />}
       {err && <div className="rounded bg-red-50 p-3 text-sm text-red-700">{err}</div>}
       {rep && (
         <>
+          {cached && <CachedBadge s={cached} />}
           <VerificationBar v={rep.verification} />
           <div className="flex flex-wrap gap-3 text-xs text-slate-500">
             <span>模式：{rep.mode === "llm" ? `大模型（${rep.model}）` : "确定性模板"}</span>
@@ -231,15 +306,36 @@ const SUGGESTIONS = [
 ];
 
 function AskTab({ d }: { d: DiagnosisResult }) {
+  const code = d.profile.code;
+  const alive = useAlive();
+  const { demo, refresh, canLive } = useDemo();
+  const samples = useSamples(code, "ask");
   const [q, setQ] = useState("");
-  const [items, setItems] = useState<AgentAnswer[]>([]);
+  const [items, setItems] = useState<{ a: AgentAnswer; cached?: SampleMeta }[]>([]);
+  const [job, setJob] = useState<JobStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const ask = (question: string) => {
-    if (!question.trim()) return;
-    setBusy(true); setErr(null);
-    api.ask(d.profile.code, question).then((a) => { setItems((x) => [a, ...x]); setQ(""); })
-      .catch((e) => setErr(String(e.message ?? e))).finally(() => setBusy(false));
+  const ask = async (question: string) => {
+    if (!question.trim() || !canLive) return;
+    setBusy(true); setErr(null); setJob(null);
+    try {
+      const start = await api.startAsk(code, question);
+      const a = await waitJob<AgentAnswer>(start, (j) => { if (alive.current) setJob(j); }, () => !alive.current);
+      if (alive.current) { setItems((x) => [{ a }, ...x]); setQ(""); }
+    } catch (e) {
+      if (alive.current) setErr(String((e as Error).message ?? e));
+    } finally {
+      if (alive.current) { setBusy(false); setJob(null); refresh(); }
+    }
+  };
+  const openSample = async (s: SampleMeta) => {
+    setErr(null);
+    try {
+      const full = await api.sample<AgentAnswer>(s.id);
+      if (alive.current) setItems((x) => [{ a: full.result, cached: s }, ...x.filter((i) => i.cached?.id !== s.id)]);
+    } catch (e) {
+      if (alive.current) setErr(String((e as Error).message ?? e));
+    }
   };
   return (
     <div className="space-y-4">
@@ -248,21 +344,38 @@ function AskTab({ d }: { d: DiagnosisResult }) {
           <input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && ask(q)}
             placeholder={`向研究智能体提问，例如：${SUGGESTIONS[0]}`}
             className="flex-1 rounded-lg border px-3 py-2 text-sm outline-none focus:border-brand-500" />
-          <button disabled={busy} onClick={() => ask(q)}
-            className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60">
+          <button disabled={busy || !canLive} onClick={() => ask(q)}
+            className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50">
             {busy ? "取证与作答中…" : "提问"}
           </button>
         </div>
-        <div className="mt-2 flex flex-wrap gap-2">
+        {samples.length > 0 && (
+          <div className="mt-3">
+            <div className="mb-1 text-xs text-slate-500">缓存样例问答（真实模型已生成并核验，点击秒开）：</div>
+            <div className="flex flex-wrap gap-2">
+              {samples.map((s) => (
+                <button key={s.id} onClick={() => openSample(s)}
+                  className="rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs text-amber-900 hover:bg-amber-100">{s.title}</button>
+              ))}
+            </div>
+          </div>
+        )}
+        <div className="mt-3 flex flex-wrap items-center gap-2">
           {SUGGESTIONS.map((s) => (
-            <button key={s} onClick={() => ask(s)} disabled={busy}
-              className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600 hover:bg-slate-200">{s}</button>
+            <button key={s} onClick={() => ask(s)} disabled={busy || !canLive}
+              className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600 hover:bg-slate-200 disabled:opacity-50">{s}</button>
           ))}
+          <span className="ml-auto">
+            <LiveQuota enabled={!!demo?.llm_enabled} limited={!!demo?.live.limited}
+              remaining={demo?.live.per_ip_remaining ?? demo?.live.daily_remaining} />
+          </span>
         </div>
       </div>
+      {job && <JobProgress job={job} />}
       {err && <div className="rounded bg-red-50 p-3 text-sm text-red-700">{err}</div>}
-      {items.map((a, i) => (
+      {items.map(({ a, cached }, i) => (
         <article key={i} className="space-y-3 rounded-2xl border bg-white p-5 shadow-sm">
+          {cached && <CachedBadge s={cached} />}
           <div className="text-sm font-medium text-slate-900">问：{a.question}</div>
           <ol className="space-y-1 border-l-2 border-brand-100 pl-3 text-xs text-slate-500">
             {a.steps.map((s, j) => (

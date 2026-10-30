@@ -5,6 +5,7 @@
     finsight verify-snapshots           # 校验全部快照对象的 SHA-256
     finsight serve --port 8000          # 启动 API 服务（及前端静态页面）
     finsight collect --symbols 600519   # 在线采集快照（需能访问数据源）
+    finsight samples add report.json    # 把真实大模型输出重新核验后存为缓存样例
 """
 
 from __future__ import annotations
@@ -241,6 +242,55 @@ def cmd_verify(args: argparse.Namespace) -> int:
     return 0 if bad == 0 else 1
 
 
+def cmd_samples(args: argparse.Namespace) -> int:
+    """缓存样例：把真实大模型输出（简报 / 问答 JSON）重新核验后存入 data/samples/。"""
+    import json
+
+    from finsight.analytics.diagnosis import diagnose
+    from finsight.config import PROJECT_ROOT
+    from finsight.samples import SampleError, SampleStore, build_ask_sample, build_report_sample
+
+    store = SampleStore(load_settings().data_dir / "samples")
+
+    def rel(path: str) -> str:  # 样例里记录相对项目根目录的来源，不记录本机绝对路径
+        try:
+            return Path(path).resolve().relative_to(PROJECT_ROOT.resolve()).as_posix()
+        except ValueError:
+            return Path(path).name
+
+    if args.action == "list":
+        for item in store.list():
+            v = item.get("verification", {})
+            print(f"{item['id']}  [{item['kind']}] {item['name']}（{item['code']}） {item.get('model')}  "
+                  f"数字 {v.get('total')}，未通过 {v.get('mismatch', 0) + v.get('invalid_ref', 0) + v.get('unverified', 0)}")
+        return 0
+    svc = _service()
+    failed = 0
+    for path in args.files:
+        try:
+            raw = json.loads(Path(path).read_text(encoding="utf-8"))
+            if "markdown" in raw:
+                code = raw["code"]
+                sample = build_report_sample(raw, diagnose(svc.company(code)), source=rel(path))
+            elif "answer" in raw:
+                if not args.code:
+                    raise SampleError("问答样例需要用 --code 指定公司代码")
+                if args.generated_at:
+                    raw["generated_at"] = args.generated_at
+                sample = build_ask_sample(raw, diagnose(svc.company(args.code)), source=rel(path))
+            else:
+                raise SampleError("无法识别的文件：既不是简报也不是问答")
+            out = store.save(sample)
+            v = sample["verification"]
+            print(f"已入库 {out.name}：数字 {v['total']}，一致 {v['verified'] + v['unattributed']}，"
+                  f"不一致 {v['mismatch']}，引用无效 {v['invalid_ref']}，无证据 {v['unverified']}，"
+                  f"整体{'通过' if v['passed'] else '未通过（样例里会如实标红）'}")
+        except (SampleError, KeyError, OSError, ValueError) as exc:
+            failed += 1
+            print(f"跳过 {path}：{exc}")
+    return 1 if failed else 0
+
+
 def cmd_serve(args: argparse.Namespace) -> int:
     import uvicorn
 
@@ -288,6 +338,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--seed", type=int, default=20261028)
     p.add_argument("--out", default="")
     p.set_defaults(func=cmd_eval)
+    p = sub.add_parser("samples", help="缓存样例：入库（重新核验）/ 列出")
+    p.add_argument("action", choices=["add", "list"])
+    p.add_argument("files", nargs="*")
+    p.add_argument("--code", default="", help="问答样例所属公司代码")
+    p.add_argument("--generated-at", default="", help="问答输出本身没有时间戳时，手工指明生成日期（如 2026-10-30）")
+    p.set_defaults(func=cmd_samples)
     p = sub.add_parser("verify-snapshots", help="校验快照完整性")
     p.set_defaults(func=cmd_verify)
     p = sub.add_parser("serve", help="启动 API 服务")

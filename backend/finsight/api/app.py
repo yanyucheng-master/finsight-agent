@@ -5,7 +5,7 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -14,10 +14,13 @@ from finsight import __version__
 from finsight.agent.research_agent import AgentAnswer, ResearchAgent
 from finsight.analytics.diagnosis import DiagnosisResult, diagnose
 from finsight.analytics.engine import metric_catalog
+from finsight.api.jobs import JobManager, JobsBusy
+from finsight.api.limits import DemoLimiter, LimitExceeded
 from finsight.config import LLM_PROVIDERS, Settings, llm_settings, load_settings
 from finsight.data.service import CompanyNotFound, DataService, load_service
 from finsight.llm.gateway import LLMClient, LLMError, make_client
 from finsight.reporting.report import Report, generate_report
+from finsight.samples import SampleStore
 
 
 class AskRequest(BaseModel):
@@ -34,6 +37,18 @@ def create_app(settings: Settings | None = None, service: DataService | None = N
     app = FastAPI(title="FinSight Agent API", version=__version__)
     app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
                        allow_methods=["*"], allow_headers=["*"])
+
+    jobs = JobManager(max_workers=settings.max_concurrent_jobs)
+    limiter = DemoLimiter(daily_limit=settings.live_daily_limit, per_ip_limit=settings.live_per_ip_daily,
+                          path=settings.data_dir / "runs" / "demo_usage.json")
+    samples = SampleStore(settings.data_dir / "samples")
+
+    def client_ip(request: Request) -> str:
+        if settings.trust_proxy:  # 只有明确部署在可信反向代理之后才读取转发头，否则访客可以伪造
+            fwd = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+            if fwd:
+                return fwd
+        return request.client.host if request.client else "unknown"
 
     @lru_cache(maxsize=64)
     def _diag(code: str, runs_key: str) -> DiagnosisResult:
@@ -141,6 +156,73 @@ def create_app(settings: Settings | None = None, service: DataService | None = N
 
         agent = ResearchAgent(get_diag(code), llm, max_steps=settings.agent_max_steps, peer_loader=peers)
         return agent.ask(body.question.strip())
+
+    # ------------------------------------------------------------------ 异步任务 / 样例 / 演示限额
+    def _start(request: Request, kind: str, code: str, live: bool, fn) -> dict:
+        ip = client_ip(request)
+        if live:
+            try:
+                limiter.reserve(ip)
+            except LimitExceeded as exc:
+                raise HTTPException(429, str(exc)) from exc
+        try:
+            job = jobs.submit(kind, code, fn, live=live)
+        except JobsBusy as exc:
+            if live:
+                limiter.release(ip)
+            raise HTTPException(503, str(exc)) from exc
+        return job.public(include_result=False)
+
+    @app.post("/api/companies/{code}/report/jobs")
+    def report_job(code: str, request: Request, mode: str = Query("auto", pattern="^(auto|llm|template)$"),
+                   provider: str | None = Query(None, pattern="^(deepseek|kimi|intern)$")) -> dict:
+        result = get_diag(code)
+        llm = get_llm(None if settings.demo_mode else provider) if mode != "template" else None
+        return _start(request, "report", code, llm is not None,
+                      lambda progress: generate_report(result, llm=llm, mode=mode, progress=progress).model_dump(mode="json"))
+
+    @app.post("/api/companies/{code}/ask/jobs")
+    def ask_job(code: str, body: AskRequest, request: Request) -> dict:
+        if not body.question.strip() or len(body.question) > 500:
+            raise HTTPException(400, "问题不能为空且不超过 500 字")
+        result = get_diag(code)
+        llm = get_llm(None if settings.demo_mode else body.provider)
+        if llm is None:
+            raise HTTPException(503, "未配置大模型 API Key，问答功能不可用（体检与模板报告不受影响）")
+
+        def peers(c: str):
+            try:
+                return get_diag(c)
+            except HTTPException:
+                return None
+
+        agent = ResearchAgent(result, llm, max_steps=settings.agent_max_steps, peer_loader=peers)
+        question = body.question.strip()
+        return _start(request, "ask", code, True,
+                      lambda progress: agent.ask(question, progress=progress).model_dump(mode="json"))
+
+    @app.get("/api/jobs/{job_id}")
+    def job_status(job_id: str) -> dict:
+        job = jobs.get(job_id)
+        if job is None:
+            raise HTTPException(404, "任务不存在或已过期")
+        return job.public()
+
+    @app.get("/api/samples")
+    def list_samples() -> list[dict]:
+        return samples.list()
+
+    @app.get("/api/samples/{sample_id}")
+    def get_sample(sample_id: str) -> dict:
+        s = samples.get(sample_id)
+        if s is None:
+            raise HTTPException(404, "样例不存在")
+        return s
+
+    @app.get("/api/demo")
+    def demo_status(request: Request) -> dict:
+        return {"demo_mode": settings.demo_mode, "llm_enabled": settings.llm.enabled,
+                "live": limiter.status(client_ip(request)), "jobs": jobs.counts(), "samples": len(samples.list())}
 
     @app.get("/api/metrics/catalog")
     def catalog() -> list[dict]:

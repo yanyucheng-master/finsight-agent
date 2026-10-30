@@ -214,3 +214,46 @@ export interface CompanyBrief {
   industry?: string | null;
   company_type: string;
 }
+
+// ---------------------------------------------------------------- 异步任务 / 缓存样例 / 演示限额
+
+export interface JobEvent { stage: string; detail: string; t: number }
+
+export interface JobStatus<T = unknown> {
+  id: string;
+  kind: "report" | "ask";
+  code: string;
+  live: boolean;
+  status: "queued" | "running" | "done" | "failed";
+  stage: string;
+  detail: string;
+  events: JobEvent[];
+  elapsed_s: number;
+  stages: string[];
+  error: string | null;
+  result?: T;
+}
+
+export interface SampleMeta {
+  id: string;
+  kind: "report" | "ask";
+  code: string;
+  name: string;
+  title: string;
+  model: string | null;
+  generated_at: string;
+  source: string;
+  elapsed_ms: number;
+  reverified: boolean;
+  verification: { total: number; verified: number; unattributed: number; mismatch: number; invalid_ref: number; unverified: number; benchmark: number; passed: boolean };
+}
+
+export interface SampleFull<T = unknown> extends SampleMeta { result: T }
+
+export interface DemoStatus {
+  demo_mode: boolean;
+  llm_enabled: boolean;
+  live: { limited: boolean; daily_limit: number; daily_used: number; daily_remaining: number | null; per_ip_limit: number; per_ip_remaining: number | null };
+  jobs: { queued: number; running: number };
+  samples: number;
+}

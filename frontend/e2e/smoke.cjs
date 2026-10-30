@@ -28,13 +28,16 @@ require('fs').mkdirSync(OUT, { recursive: true });
   await page.screenshot({ path: OUT + '/4_brief.png', fullPage: true });
   // 口径提示必须让核验条显示为“未通过”（用 2026-10-29 真实 Kimi 简报重新核验后的结果作为接口响应）
   const fixture = require('fs').readFileSync(__dirname + '/fixture_report_consistency.json', 'utf-8');
-  await page.route('**/api/companies/*/report*', (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: fixture }));
+  const doneJob = { id: 'fixture', kind: 'report', code: '000002', live: false, status: 'done', stage: 'done', detail: '',
+    events: [], elapsed_s: 0, stages: ['evidence', 'drafting', 'verifying', 'revising', 'done'], error: null,
+    result: JSON.parse(fixture) };
+  await page.route('**/api/companies/*/report/jobs*', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(doneJob) }));
   await page.click('text=模板简报（无需大模型）');
   await page.waitForSelector('text=数字一致，但存在口径或合规提示', { timeout: 30000 });
   await page.waitForSelector('text=口径提示');
   await page.screenshot({ path: OUT + '/4b_brief_consistency.png', fullPage: true });
-  await page.unroute('**/api/companies/*/report*');
+  await page.unroute('**/api/companies/*/report/jobs*');
   await page.click('nav >> text=指标趋势');
   await page.waitForTimeout(800);
   await page.screenshot({ path: OUT + '/5_metrics.png' });
@@ -45,8 +48,9 @@ require('fs').mkdirSync(OUT, { recursive: true });
   await page.screenshot({ path: OUT + '/6_statement_drawer.png' });
   await page.keyboard.press('Escape');
   await page.click('nav >> text=智能问答');
-  await page.click('text=提问');
-  await page.waitForTimeout(1500);
+  // 没有配置 Key 时，提问按钮不可用，并明确说明原因（而不是点了才报错）
+  await page.waitForSelector('text=服务端未配置大模型 Key');
+  if (!(await page.locator('button:has-text("提问")').isDisabled())) throw new Error('无 Key 时提问按钮应禁用');
   await page.screenshot({ path: OUT + '/7_ask_nollm.png' });
   console.log('errors:', JSON.stringify(errors));
   await browser.close();

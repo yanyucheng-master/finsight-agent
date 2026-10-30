@@ -46,6 +46,13 @@ def _env_float(name: str, default: float) -> float:
         return default
 
 
+def _env_bool(name: str, default: bool = False) -> bool:
+    raw = _env(name).lower()
+    if not raw:
+        return default
+    return raw in {"1", "true", "yes", "on"}
+
+
 def _env_int(name: str, default: int) -> int:
     raw = _env(name)
     try:
@@ -142,16 +149,29 @@ class Settings:
     agent_max_steps: int = 6
     # 引擎版本：写入每次分析结果，便于追溯
     engine_version: str = "0.2.0"
+    # 在线演示（FINSIGHT_DEMO_MODE=1）：实时调用大模型有次数限额；Key 只在服务端，前端不能指定供应商。
+    # 本地运行默认不限额。限额为 0 表示不限。费用硬保护另有 LLM_BUDGET_CNY（进程级，见 llm/gateway.py）。
+    demo_mode: bool = False
+    live_daily_limit: int = 0       # 每天（北京时间）全站实时生成次数
+    live_per_ip_daily: int = 0      # 每天每个访客实时生成次数
+    max_concurrent_jobs: int = 2    # 同时运行的生成任务数；排队上限为其 3 倍
+    trust_proxy: bool = False       # 部署在反向代理（如 Render）后面时，读取 X-Forwarded-For 识别访客
 
 
 def load_settings() -> Settings:
     data_dir = Path(_env("FINSIGHT_DATA_DIR") or (PROJECT_ROOT / "data"))
     snapshot_dir = Path(_env("FINSIGHT_SNAPSHOT_DIR") or (data_dir / "snapshots"))
     llm = llm_settings()
+    demo = _env_bool("FINSIGHT_DEMO_MODE")
     return Settings(
         data_dir=data_dir,
         snapshot_dir=snapshot_dir,
         provider_mode=_env("FINSIGHT_PROVIDER", "snapshot") or "snapshot",
         llm=llm,
         agent_max_steps=_env_int("FINSIGHT_AGENT_MAX_STEPS", 6),
+        demo_mode=demo,
+        live_daily_limit=_env_int("FINSIGHT_LIVE_DAILY_LIMIT", 40 if demo else 0),
+        live_per_ip_daily=_env_int("FINSIGHT_LIVE_PER_IP_DAILY", 3 if demo else 0),
+        max_concurrent_jobs=max(1, _env_int("FINSIGHT_MAX_CONCURRENT_JOBS", 2)),
+        trust_proxy=_env_bool("FINSIGHT_TRUST_PROXY"),
     )

@@ -17,6 +17,7 @@ from finsight.analytics.diagnosis import DiagnosisResult
 from finsight.analytics.rules import DIMENSION_LABELS
 from finsight.domain import Evidence, fmt_value
 from finsight.llm.gateway import LLMClient, LLMError, UsageMeter
+from finsight.progress import Progress, emit
 from finsight.reporting.verifier import VerificationResult, annotate, verify
 
 SEV_LABEL = {"high": "高", "medium": "中", "low": "低", "info": "提示"}
@@ -180,6 +181,11 @@ def _issues(v: VerificationResult) -> int:
     return len(v.problems) + len(v.compliance_flags) + len(v.consistency_flags)
 
 
+def _verify_note(v: VerificationResult) -> str:
+    return (f"核验 {v.total} 个数字：{v.verified + v.unattributed} 个与证据一致，{len(v.problems)} 个有问题"
+            + (f"，另有 {len(v.consistency_flags)} 条口径提示" if v.consistency_flags else ""))
+
+
 def data_asof(result: DiagnosisResult) -> str:
     """数据时效说明（确定性生成）：最新报告期、该期财务数据的公告日、全部快照的采集日期范围。
 
@@ -220,9 +226,10 @@ def _revision_prompt(v: VerificationResult) -> str:
 
 
 def generate_report(result: DiagnosisResult, *, llm: LLMClient | None = None, mode: str = "auto",
-                    max_revisions: int = 1) -> Report:
+                    max_revisions: int = 1, progress: Progress | None = None) -> Report:
     started = time.monotonic()
     ctx = build_context(result)
+    emit(progress, "evidence", f"已整理 {len(ctx.refs)} 条带编号的证据")
     refs_public = {r: e.id for r, e in ctx.refs.items()}
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     warnings: list[str] = []
@@ -235,6 +242,7 @@ def generate_report(result: DiagnosisResult, *, llm: LLMClient | None = None, mo
         meter = UsageMeter()
         messages = [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": _user_prompt(ctx)}]
         try:
+            emit(progress, "drafting", f"{getattr(llm, 'model', '大模型')} 正在撰写简报（推理模型通常需要 0.5–2 分钟）")
             resp = llm.chat(messages)  # type: ignore[union-attr]
             meter.add(resp)
             text = resp.content.strip()
@@ -243,8 +251,10 @@ def generate_report(result: DiagnosisResult, *, llm: LLMClient | None = None, mo
             if resp.truncated:
                 warnings.append("模型输出达到长度上限，报告可能不完整")
             v = verify(text, ctx.refs)
+            emit(progress, "verifying", _verify_note(v))
             attempts, revised = 1, False
             while not v.passed and attempts <= max_revisions:
+                emit(progress, "revising", f"核验发现 {_issues(v)} 处问题，请模型修订（第 {attempts} 次）")
                 # 推理模型要求回传完整的 assistant 消息（含 reasoning_content）
                 messages += [resp.as_message(), {"role": "user", "content": _revision_prompt(v)}]
                 try:
@@ -256,6 +266,7 @@ def generate_report(result: DiagnosisResult, *, llm: LLMClient | None = None, mo
                 attempts += 1
                 new_text = resp.content.strip()
                 new_v = verify(new_text, ctx.refs)
+                emit(progress, "verifying", "修订稿：" + _verify_note(new_v))
                 # 只有修订确实减少了问题、且没有变成空文本才采用（防止越改越差）
                 if new_text and _issues(new_v) <= _issues(v):
                     text, v, revised = new_text, new_v, True
@@ -272,8 +283,10 @@ def generate_report(result: DiagnosisResult, *, llm: LLMClient | None = None, mo
         except LLMError as exc:
             warnings.append(f"大模型调用失败，已降级为模板报告：{exc}")
 
+    emit(progress, "drafting", "按确定性模板生成简报（不调用大模型）")
     text = template_report(result, ctx)
     v = verify(text, ctx.refs)
+    emit(progress, "verifying", _verify_note(v))
     note = _asof_note(result)
     return Report(code=result.profile.code, name=result.profile.name, mode="template", markdown=text + note,
                   annotated_markdown=annotate(text, v) + note, data_asof=data_asof(result), refs=refs_public, verification=v, warnings=warnings,
