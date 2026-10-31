@@ -40,6 +40,24 @@ def _summary_evidence(result: DiagnosisResult) -> Evidence:
                     value=f"通过 {cs['pass']} 项，未通过 {cs['fail']} 项，跳过 {cs['skip']} 项")
 
 
+def refs_from_mapping(mapping: dict[str, str], result: DiagnosisResult) -> dict[str, Evidence]:
+    """按简报当时的引用映射（E# → 证据 ID）从当前体检结果取回证据；取不到就抛 SampleError。"""
+    refs: dict[str, Evidence] = {}
+    for ref, eid in dict(mapping).items():
+        if eid == "c:summary":
+            refs[ref] = _summary_evidence(result)
+        elif eid in result.evidence:
+            refs[ref] = result.evidence[eid]
+        else:
+            raise SampleError(f"引用的证据 {eid} 在当前快照里不存在，样例不再可信")
+    return refs
+
+
+def split_note(text: str) -> str:
+    """去掉系统追加在末尾的“数据时效”行，只留模型写的正文。"""
+    return _strip_note(text)[0]
+
+
 def _verification_brief(v) -> dict[str, Any]:
     return {"total": v.total, "verified": v.verified, "unattributed": v.unattributed, "mismatch": v.mismatch,
             "invalid_ref": v.invalid_ref, "unverified": v.unverified, "benchmark": v.benchmark,
@@ -52,14 +70,7 @@ def build_report_sample(raw: dict[str, Any], result: DiagnosisResult, *, source:
         raise SampleError("只有大模型生成的简报才需要缓存（模板简报是即时、免费的）")
     if raw.get("code") != result.profile.code:
         raise SampleError(f"简报公司 {raw.get('code')} 与体检结果 {result.profile.code} 不一致")
-    refs: dict[str, Evidence] = {}
-    for ref, eid in dict(raw["refs"]).items():
-        if eid == "c:summary":
-            refs[ref] = _summary_evidence(result)
-        elif eid in result.evidence:
-            refs[ref] = result.evidence[eid]
-        else:
-            raise SampleError(f"引用的证据 {eid} 在当前快照里不存在，样例不再可信")
+    refs = refs_from_mapping(raw["refs"], result)
     body, _ = _strip_note(raw["markdown"])
     v = verify(body, refs)
     note = f"\n\n> 数据时效（系统生成）：{data_asof(result)}。"

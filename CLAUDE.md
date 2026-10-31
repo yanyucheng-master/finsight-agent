@@ -41,6 +41,7 @@ python -m finsight.cli verify-snapshots        # 快照完整性
 python -m finsight.cli serve                   # 工作台 http://127.0.0.1:8000 ；API 文档 /docs
 python -m finsight.cli report 600519 --mode template   # 可验证简报（--mode llm 需要 Key）
 python -m finsight.cli ask 600519 "问题"        # 研究问答（需要 Key）
+python -m finsight.cli eval ablation-score DIR  # 评测②离线重新打分（`eval ablation` 会调用大模型，由用户运行 scripts\eval_ablation.bat）
 cd frontend && npm install && npm run build    # 前端构建（输出到 backend/finsight/web）
 node frontend/e2e/smoke.cjs                    # 端到端冒烟（需先 serve）
 ruff check finsight tests

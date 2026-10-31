@@ -49,6 +49,9 @@ class Report(BaseModel):
     generated_at: str
     elapsed_ms: int = 0
     data_asof: str = ""  # 系统生成的数据时效说明（同时追加在正文末尾，不依赖模型是否写出）
+    # 大模型初稿（尚未经过核验器打回修订）的核验统计；只有 LLM 简报才有。评测② B 组（有证据、无核验）就是它。
+    draft_check: dict[str, int] | None = None
+    draft_markdown: str | None = None  # 初稿正文；只在被修订过时保存（未修订则与终稿正文相同）
 
 
 # ------------------------------------------------------------------ 上下文
@@ -181,6 +184,12 @@ def _issues(v: VerificationResult) -> int:
     return len(v.problems) + len(v.compliance_flags) + len(v.consistency_flags)
 
 
+def _draft_check(v: VerificationResult) -> dict[str, int]:
+    return {"total": v.total, "supported": v.verified + v.unattributed,
+            "problems": v.mismatch + v.invalid_ref + v.unverified,
+            "flags": len(v.consistency_flags) + len(v.compliance_flags)}
+
+
 def _verify_note(v: VerificationResult) -> str:
     return (f"核验 {v.total} 个数字：{v.verified + v.unattributed} 个与证据一致，{len(v.problems)} 个有问题"
             + (f"，另有 {len(v.consistency_flags)} 条口径提示" if v.consistency_flags else ""))
@@ -252,6 +261,7 @@ def generate_report(result: DiagnosisResult, *, llm: LLMClient | None = None, mo
                 warnings.append("模型输出达到长度上限，报告可能不完整")
             v = verify(text, ctx.refs)
             emit(progress, "verifying", _verify_note(v))
+            draft_text, draft_v = text, v
             attempts, revised = 1, False
             while not v.passed and attempts <= max_revisions:
                 emit(progress, "revising", f"核验发现 {_issues(v)} 处问题，请模型修订（第 {attempts} 次）")
@@ -277,6 +287,7 @@ def generate_report(result: DiagnosisResult, *, llm: LLMClient | None = None, mo
             return Report(code=result.profile.code, name=result.profile.name, mode="llm",
                           model=getattr(llm, "model", None), markdown=text + note,
                           annotated_markdown=annotate(text, v) + note, data_asof=data_asof(result),
+                          draft_check=_draft_check(draft_v), draft_markdown=draft_text if revised else None,
                           refs=refs_public, verification=v, attempts=attempts, revised=revised,
                           usage=meter.as_dict(), warnings=warnings, generated_at=now,
                           elapsed_ms=int((time.monotonic() - started) * 1000))

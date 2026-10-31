@@ -211,15 +211,78 @@ def cmd_ask(args: argparse.Namespace) -> int:
 
 
 def cmd_eval(args: argparse.Namespace) -> int:
-    from finsight.evaluation.verifier_bench import run, save, to_markdown
-
     if args.which == "verifier":
+        from finsight.evaluation.verifier_bench import run, save, to_markdown
+
         summary = run(_service(), seed=args.seed)
         out = Path(args.out) if args.out else load_settings().data_dir.parent / "docs" / "eval"
         j, m = save(summary, out)
         print(to_markdown(summary))
         print(f"已写入 {j} 与 {m}")
-    return 0
+        return 0
+    return _eval_ablation(args)
+
+
+def _eval_ablation(args: argparse.Namespace) -> int:
+    """评测②：ablation 运行（调用大模型，有费用上限、可断点续跑）/ ablation-score 离线重新打分。"""
+    import os
+
+    from finsight.analytics.diagnosis import diagnose
+    from finsight.evaluation import ablation
+
+    svc = _service()
+    root = load_settings().data_dir.parent
+    provider = args.provider or "kimi"
+
+    def diag_of(code: str):
+        return diagnose(svc.company(code))
+
+    if args.which == "ablation-score":
+        out = Path(args.target) if args.target else root / "docs" / "eval" / f"ablation-{provider}"
+        res = ablation.score_dir(out, diag_of, audit_file=Path(args.audit) if args.audit else None, per_group=args.per_group)
+        print((out / "ablation_report.md").read_text(encoding="utf-8"))
+        print(f"已写入 {out / 'ablation_report.md'}" + ("" if args.audit else f"；抽检表 {out / 'audit_sheet.csv'}"))
+        return 0 if res else 1
+
+    from finsight.config import llm_settings
+    from finsight.llm.gateway import LLMError, make_client
+
+    out = Path(args.out) if args.out else root / "docs" / "eval" / f"ablation-{provider}"
+    codes = args.codes or ablation.DEFAULT_CODES
+    os.environ.setdefault("LLM_MAX_TOKENS", "8192")  # 与 scripts/llm_smoke.py 一致：让逐请求的费用预留更贴近实际
+    cfg = llm_settings(provider)
+    if not cfg.enabled:
+        print(f"未配置 {provider} 的 API Key（请先运行 scripts\\setup_env.bat）")
+        return 1
+    ledger = ablation.read_ledger(out)
+    spent = ledger["total_cost_cny_est"]
+    if args.budget > 0:
+        if spent >= args.budget:
+            print(f"该目录已记账约 {spent:.2f} 元，达到或超过预算 {args.budget:.2f} 元，不再运行。")
+            return 1
+        os.environ["LLM_BUDGET_CNY"] = f"{args.budget - spent:.4f}"  # 预算按整个目录累计（含此前各次运行）
+    try:
+        llm = make_client(cfg)
+    except LLMError as exc:
+        print("大模型不可用：", exc)
+        return 1
+    print(f"评测②：{cfg.provider} / {cfg.model}，公司 {len(codes)} 家，预算 {args.budget or '不限'} 元（此前已记账约 {spent:.2f} 元），输出 {out}")
+    res = ablation.run_all(codes, diag_of, llm, out, model=cfg.model, workers=args.workers)
+    done = [c for c in codes if (out / "companies" / f"{c}.json").exists()]
+    print(f"\n完成 {len(done)} / {len(codes)} 家；本目录累计估算花费 {res['total_cost_cny_est']:.2f} 元（客户端估算，以服务商控制台为准）")
+    if res["stopped_by_budget"]:
+        print("已触发费用保护，剩余公司未运行。可提高 --budget 后重新运行（已完成的会跳过）。")
+    if not done:
+        return 1
+    complete = len(done) == len(codes)
+    ablation.score_dir(out, diag_of, per_group=args.per_group, make_audit=complete)
+    print((out / "ablation_report.md").read_text(encoding="utf-8"))
+    if complete:
+        print(f"抽检表：{out / 'audit_sheet.csv'}（用 Excel 打开，只填“判定”和“备注”两列）")
+    else:
+        missing = [c for c in codes if c not in done]
+        print(f"未完成：{', '.join(missing)}。重新运行同一命令会只补跑这些；全部完成后才会生成抽检表。")
+    return 0 if complete else 2
 
 
 def cmd_verify(args: argparse.Namespace) -> int:
@@ -333,10 +396,17 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("llm-check", help="检查大模型 API 连通性")
     p.add_argument("--provider", choices=["deepseek", "kimi", "intern"], default="deepseek")
     p.set_defaults(func=cmd_llm_check)
-    p = sub.add_parser("eval", help="运行评测（verifier：核验器错误检出率）")
-    p.add_argument("which", choices=["verifier"])
+    p = sub.add_parser("eval", help="运行评测（verifier：核验器检出率；ablation：数字幻觉三组对比，调用大模型；ablation-score：离线重新打分）")
+    p.add_argument("which", choices=["verifier", "ablation", "ablation-score"])
+    p.add_argument("target", nargs="?", default="", help="ablation-score：评测目录")
     p.add_argument("--seed", type=int, default=20261028)
     p.add_argument("--out", default="")
+    p.add_argument("--provider", choices=["deepseek", "kimi", "intern"], default=None)
+    p.add_argument("--codes", nargs="*", default=None, help="ablation：公司代码（默认 9 家样本）")
+    p.add_argument("--budget", type=float, default=9.0, help="ablation：本目录累计费用上限（元，客户端估算），0 表示不限")
+    p.add_argument("--workers", type=int, default=2, help="ablation：并发公司数")
+    p.add_argument("--audit", default="", help="ablation-score：填好的人工抽检表（csv）")
+    p.add_argument("--per-group", type=int, default=15, help="人工抽检每组抽取的数字个数")
     p.set_defaults(func=cmd_eval)
     p = sub.add_parser("samples", help="缓存样例：入库（重新核验）/ 列出")
     p.add_argument("action", choices=["add", "list"])
