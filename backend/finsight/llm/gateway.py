@@ -97,12 +97,14 @@ class BudgetGuard:
         self._lock = threading.Lock()
         self._tl = threading.local()  # 每个线程同一时刻只有一次发送在途：reserve 压栈、settle 出栈
         self.listeners: list[Callable[[dict[str, Any]], None]] = []
+        self.fault: str | None = None  # 结算记录写不进账本后置位：之后一律拒绝发送
 
     def add_listener(self, fn: Callable[[dict[str, Any]], None]) -> Callable[[], None]:
         """登记账本监听器（评测脚本用它把每次发送持久化）。返回取消登记的函数。
 
         reserve 事件在请求发出**之前**调用，监听器抛异常 = 拒绝发送（账本写不进去就不花钱）；
-        settle 事件在结算之后调用，监听器出错不影响调用方（该笔预留在账本里保持“未结算”，按上界计）。"""
+        settle 事件在内存结算之前调用：写入失败时，这笔请求在内存里也按预留上界计（与账本里“未结算 = 按上界”一致），
+        并置位 fault，之后的请求一律拒绝发送——进程内的预算和持久账本不能出现分歧。"""
         self.listeners.append(fn)
         return lambda: self.listeners.remove(fn) if fn in self.listeners else None
 
@@ -121,6 +123,8 @@ class BudgetGuard:
         nbytes = len(json.dumps({k: payload.get(k) for k in ("messages", "tools")}, ensure_ascii=False).encode("utf-8"))
         amount = (nbytes * miss_p + int(payload.get("max_tokens", 0)) * out_p) / 1e6
         with self._lock:
+            if self.fault:
+                raise LLMError(f"费用保护：{self.fault}，已停止发送")
             if limit > 0 and self.spent + self.pending + amount > limit:
                 raise LLMError(f"费用保护：已估算花费 {self.spent:.4f} 元（另有 {self.pending:.4f} 元进行中），"
                                f"本次请求最多可能再花 {amount:.4f} 元，将超过预算 {limit:.2f} 元（LLM_BUDGET_CNY），已停止发送")
@@ -138,18 +142,20 @@ class BudgetGuard:
     def settle(self, reserved: float, actual: float | None) -> None:
         """actual=None 表示费用不明，按预留上界记账。"""
         with self._lock:
-            self.pending -= reserved
             charged = reserved if actual is None else actual
-            self.spent += charged
-            self.calls += 1
             stack = self._tl.__dict__.get("stack") or []
             rid = stack.pop() if stack else None
-        if rid is not None:
-            for fn in list(self.listeners):
-                try:
-                    fn({"ev": "settle", "id": rid, "charged": charged, "exact": actual is not None})
-                except Exception:  # noqa: BLE001 —— 结算记录写不进去：账本里保持未结算，按预留上界计
-                    pass
+            if rid is not None:
+                for fn in list(self.listeners):
+                    try:
+                        fn({"ev": "settle", "id": rid, "charged": charged, "exact": actual is not None})
+                    except Exception as exc:  # noqa: BLE001
+                        # 账本里这笔仍是“只有占用、没有结算”，按预留上界计；内存里同样按上界，并停止后续发送
+                        charged = reserved
+                        self.fault = f"结算记录无法写入账本（{type(exc).__name__}: {exc}）"
+            self.pending -= reserved
+            self.spent += charged
+            self.calls += 1
 
 
 BUDGET = BudgetGuard()

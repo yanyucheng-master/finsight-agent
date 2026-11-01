@@ -261,6 +261,7 @@ def _eval_ablation(args: argparse.Namespace) -> int:
         print("大模型不可用：", exc)
         return 1
     print(f"评测②：{cfg.provider} / {cfg.model}，公司 {len(codes)} 家，预算 {args.budget or '不限'} 元（此前已记账约 {spent:.2f} 元），输出 {out}")
+    print("提醒：预算上限只约束这个输出目录；总授权额度（含此前各次测试）请对照服务商控制台的已用金额。")
     try:
         res = ablation.run_all(codes, diag_of, llm, out, model=cfg.model, workers=args.workers, budget=args.budget)
     except ablation.BudgetExhausted as exc:

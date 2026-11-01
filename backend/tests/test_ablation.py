@@ -8,6 +8,8 @@ from __future__ import annotations
 import csv
 import json
 import os
+import subprocess
+import sys
 import time
 
 import httpx
@@ -166,7 +168,8 @@ class Killed(BaseException):
 def _run(diag, llm, out, **kw):
     kw.setdefault("workers", 1)
     kw.setdefault("log", lambda m: None)
-    return ablation.run_all(["600519"], diag_of_factory(diag), llm, out, model="mock-llm", **kw)
+    model = kw.pop("model", "mock-llm")
+    return ablation.run_all(["600519"], diag_of_factory(diag), llm, out, model=model, **kw)
 
 
 def _real_client(handler) -> OpenAICompatibleClient:
@@ -436,3 +439,139 @@ def test_cli_refuses_when_directory_budget_is_used_up(diag, tmp_path, monkeypatc
     monkeypatch.setattr("finsight.llm.gateway.make_client", lambda cfg: never)
     assert cli_main(["eval", "ablation", "--out", str(out), "--budget", "9"]) == 1
     assert "不再运行" in capsys.readouterr().out and not never.requests
+
+
+# ------------------------------------------------------------------ 第二轮复核（eee3ad5）指出的边界问题
+
+def test_torn_ledger_tail_is_cleared_so_new_records_are_not_swallowed(tmp_path):
+    out = tmp_path / "ab"
+    out.mkdir()
+    reserve = json.dumps({"ev": "reserve", "id": "a", "reserved": 0.1, "code": "600519", "stage": "A"})
+    (out / "ledger.jsonl").write_text(reserve + "\n" + '{"ev": "settle", "id": "a", "char', encoding="utf-8")  # 崩溃时写了一半
+    j = ablation.Journal(out / "ledger.jsonl")  # 打开账本时清走残片
+    j.append({"ev": "reserve", "id": "b", "reserved": 0.2})
+    j.append({"ev": "settle", "id": "b", "charged": 0.05, "exact": True})
+    led = ablation.read_ledger(out)
+    assert not led["corrupt"] and led["requests"] == 2
+    assert led["total_cost_cny_est"] == pytest.approx(0.1 + 0.05)  # a 未结算按上界，b 按实际
+    assert "char" in (out / "ledger.torn").read_text(encoding="utf-8")  # 残片留档，没有悄悄丢掉
+
+
+def test_complete_record_without_trailing_newline_is_kept(tmp_path):
+    out = tmp_path / "ab"
+    out.mkdir()
+    # 刚落盘的 reserve 只差结尾换行：它可能对应一个已经发出的请求，必须保留
+    (out / "ledger.jsonl").write_text(json.dumps({"ev": "reserve", "id": "a", "reserved": 0.3}), encoding="utf-8")
+    assert ablation.read_ledger(out)["total_cost_cny_est"] == pytest.approx(0.3)
+    j = ablation.Journal(out / "ledger.jsonl")
+    j.append({"ev": "reserve", "id": "b", "reserved": 0.2})
+    led = ablation.read_ledger(out)
+    assert not led["corrupt"] and led["requests"] == 2 and led["total_cost_cny_est"] == pytest.approx(0.5)
+    assert not (out / "ledger.torn").exists()
+
+
+def test_garbage_last_line_with_newline_is_corruption_not_a_torn_tail(tmp_path):
+    out = tmp_path / "ab"
+    out.mkdir()
+    (out / "ledger.jsonl").write_text(json.dumps({"ev": "reserve", "id": "a", "reserved": 0.1}) + "\n乱码\n", encoding="utf-8")
+    assert ablation.read_ledger(out)["corrupt"]
+
+
+def test_run_all_recovers_from_torn_tail_and_keeps_counting(diag, tmp_path, guard):
+    out = tmp_path / "ab"
+    out.mkdir()
+    (out / "ledger.jsonl").write_text(json.dumps({"ev": "reserve", "id": "old", "reserved": 0.4}) + "\n" + '{"ev": "settle", "id"',
+                                      encoding="utf-8")
+    res = _run(diag, _real_client(lambda r: _chat_ok(_drafts(diag)[1]) if not _is_a(r) else _chat_ok(A_TEXT)), out)
+    assert res["outcome"] == {"600519": "done"}
+    led = ablation.read_ledger(out)
+    assert not led["corrupt"] and led["requests"] == 3  # 旧的一笔 + A + C
+    assert led["total_cost_cny_est"] == pytest.approx(0.4 + guard.spent)  # 旧的未结算按上界计入
+
+
+def test_settle_write_failure_stops_sending_and_keeps_memory_equal_to_ledger(diag, tmp_path, guard, monkeypatch):
+    orig, sent = ablation.Journal.append, []
+
+    def flaky(self, rec):
+        if rec.get("ev") == "settle":
+            raise OSError("disk full")
+        return orig(self, rec)
+
+    monkeypatch.setattr(ablation.Journal, "append", flaky)
+
+    def handler(request):
+        sent.append(_is_a(request))
+        return _chat_ok(A_TEXT)
+
+    out = tmp_path / "ab"
+    res = _run(diag, _real_client(handler), out)
+    assert sent == [True]  # A 发出后结算记录写不进账本：后面的请求一律不发
+    assert guard.fault and "无法写入账本" in guard.fault and res["stopped_by_budget"]
+    led = ablation.read_ledger(out)
+    assert len(led["unsettled_requests"]) == 1  # 账本里 A 只有占用、没有结算 → 按上界计
+    assert guard.spent == pytest.approx(led["total_cost_cny_est"]) and guard.pending == 0  # 进程内与账本一致
+    assert (out / "partial" / "600519.json").exists()  # A 的结果已经拿到，不浪费：下次只补 C
+
+
+def test_hard_killed_process_leaves_recoverable_state(diag, tmp_path, monkeypatch):
+    """真正终止一个子进程（os._exit：不跑任何清理代码），再从遗留的账本 / 锁 / 部分结果恢复。
+    这是 Linux 上的真实进程终止；Windows 上的表现没有验证。"""
+    out = tmp_path / "ab"
+    script = """
+import json, os, sys
+from pathlib import Path
+import httpx
+from finsight.analytics.diagnosis import diagnose
+from finsight.config import LLMSettings, load_settings
+from finsight.data.service import load_service
+from finsight.evaluation import ablation
+from finsight.llm.gateway import OpenAICompatibleClient
+
+out, a_text = Path(sys.argv[1]), sys.argv[2]
+diag = diagnose(load_service(load_settings().snapshot_dir).company("600519"))
+
+def handler(request):
+    if json.loads(request.content)["messages"][0]["content"] == ablation.PURE_SYSTEM:
+        return httpx.Response(200, json={"model": "kimi-k3.1-pro", "usage": {"prompt_tokens": 2000, "completion_tokens": 1500},
+                                         "choices": [{"index": 0, "message": {"role": "assistant", "content": a_text},
+                                                      "finish_reason": "stop"}]})
+    os._exit(7)  # C 组请求发出后进程被终止
+
+cfg = LLMSettings(provider="kimi", base_url="https://llm.test/v1", api_key="sk-test", model="kimi-k3.1-pro", reasoning_effort="low")
+llm = OpenAICompatibleClient(cfg, transport=httpx.MockTransport(handler), backoff_s=0)
+ablation.run_all(["600519"], lambda c: diag, llm, out, model="kimi-k3.1-pro", workers=1, log=lambda m: None)
+"""
+    proc = subprocess.run([sys.executable, "-c", script, str(out), A_TEXT], capture_output=True, text=True, timeout=240)
+    assert proc.returncode == 7, proc.stderr[-800:]
+    assert (out / "run.lock").exists()  # 没来得及清理：遗留的锁
+    led = ablation.read_ledger(out)
+    assert len(led["unsettled_requests"]) == 1 and led["unsettled_requests"][0]["stage"] == "C" and not led["corrupt"]
+    assert (out / "partial" / "600519.json").exists() and not (out / "companies").exists()
+
+    with pytest.raises(ablation.RunBusy):  # 锁刚刚还有心跳：此刻不能抢
+        _run(diag, MockLLM(script=[]), out)
+    old = time.time() - 600
+    os.utime(out / "run.lock", (old, old))  # 过了心跳超时：视为遗留，可以接管
+    monkeypatch.setattr(gw, "BUDGET", gw.BudgetGuard())
+    sent, logs = [], []
+
+    def handler2(request):
+        sent.append(_is_a(request))
+        return _chat_ok(_drafts(diag)[1])
+
+    res = _run(diag, _real_client(handler2), out, budget=50.0, log=logs.append, model="kimi-k3.1-pro")
+    assert res["outcome"] == {"600519": "done"} and sent == [False]  # 只补 C，A 不重发
+    assert any("没有结算记录" in m for m in logs) and len(ablation.read_ledger(out)["unsettled_requests"]) == 1
+
+
+def test_truncated_revision_is_not_adopted_and_is_flagged(diag, tmp_path):
+    draft, fixed = _drafts(diag)
+    out = tmp_path / "ab"
+    llm = MockLLM(script=[A_TEXT, draft, LLMResponse(content=fixed, finish_reason="length")])  # 修订稿被截断
+    res = _run(diag, llm, out)
+    assert res["outcome"] == {"600519": "done"}  # 初稿完整，仍是有效记录
+    c = json.loads((out / "companies" / "600519.json").read_text(encoding="utf-8"))["C"]
+    assert not c["revised"] and not c["truncated"] and c["verification"]["unverified"] == 1  # 采用的仍是初稿
+    assert any("修订稿" in w for w in c["warnings"])
+    r = ablation.score_dir(out, diag_of_factory(diag), make_audit=False)
+    assert r["summary"]["revision_failed_reports"] == 1 and r["per_company"][0]["B"]["problems"] == 1

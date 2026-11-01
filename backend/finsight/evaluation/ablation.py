@@ -113,7 +113,7 @@ def rec_problem(rec: dict[str, Any]) -> tuple[str, str] | None:
     c = rec["C"]
     if c.get("mode") != "llm":
         return "degraded", "完整流程降级为模板：" + "；".join(c.get("warnings", []))[:150]
-    if any("长度上限" in w for w in c.get("warnings", [])):
+    if c.get("truncated"):  # 最终采用的正文来自被截断的回复（被截断的修订稿不会被采用）
         return "c_truncated", "C 组输出达到长度上限被截断，内容可能不完整"
     return None
 
@@ -167,15 +167,47 @@ def _rec_cost(rec: dict[str, Any]) -> float:
 class Journal:
     """账本是唯一的事实来源：reserve（发送前的占用上界）→ settle（结算）。
     只有 reserve 没有 settle 的请求 = 进程中途被杀 / 关窗，服务端可能已经计费，按占用上界计入累计，
-    直到用户对照服务商账单核对。服务商账单才是实际扣费的依据，这里只是客户端的保守估算。"""
+    直到用户对照服务商账单核对。服务商账单才是实际扣费的依据，这里只是客户端的保守估算。
+
+    上次崩溃可能留下写了一半的最后一行（没有换行结尾）。每次追加之前先把这段残片挪到 ledger.torn 并截掉，
+    否则新记录会接在残片后面、两条都读不出来。残片只可能是正在写入的那一条：残缺的 reserve 意味着请求根本没发出，
+    残缺的 settle 则让对应的 reserve 保持“未结算”，按上界计，两种情况都不会少算。"""
 
     def __init__(self, path: Path):
         self.path, self._lock = path, threading.Lock()
         path.parent.mkdir(parents=True, exist_ok=True)
+        with self._lock:
+            self._repair_tail()
+
+    def _repair_tail(self) -> None:
+        try:
+            data = self.path.read_bytes()
+        except FileNotFoundError:
+            return
+        if not data or data.endswith(b"\n"):
+            return
+        cut = data.rfind(b"\n") + 1  # 没有换行时 cut = 0：整个文件就是一条残片
+        try:
+            json.loads(data[cut:].decode("utf-8"))
+        except (ValueError, UnicodeDecodeError):
+            pass
+        else:  # 内容完整只是缺了结尾的换行：这条记录有效（可能是刚落盘的 reserve），保留并补上换行
+            with self.path.open("ab") as f:
+                f.write(b"\n")
+                f.flush()
+                os.fsync(f.fileno())
+            return
+        with (self.path.parent / "ledger.torn").open("ab") as f:
+            f.write(data[cut:] + b"\n")
+        with self.path.open("r+b") as f:
+            f.truncate(cut)
+            f.flush()
+            os.fsync(f.fileno())
 
     def append(self, rec: dict[str, Any]) -> None:
         line = (json.dumps({**rec, "at": _now()}, ensure_ascii=False) + "\n").encode("utf-8")
         with self._lock:
+            self._repair_tail()
             fd = os.open(self.path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, "O_BINARY", 0), 0o644)  # Windows：二进制模式，不改换行
             try:
                 os.write(fd, line)
@@ -188,14 +220,16 @@ class Journal:
 
 
 def read_ledger(out_dir: Path) -> dict[str, Any]:
-    """从 ledger.jsonl 重算累计费用。最后一行写了一半（崩溃时）可以忽略——那条 reserve 还没发出请求；
-    中间有读不懂的行说明账本损坏，corrupt=True，调用方应拒绝继续花钱。"""
+    """从 ledger.jsonl 重算累计费用。文件末尾没有换行的残片（崩溃时写了一半）可以忽略，Journal 会在下次写入前清走它；
+    其他任何读不懂的行（包括以换行结尾的最后一行）都说明账本损坏，corrupt=True，调用方应拒绝继续花钱。"""
     p = out_dir / "ledger.jsonl"
     reserves: dict[str, dict] = {}
     settles: dict[str, dict] = {}
     companies: list[dict] = []
     bad: list[int] = []
-    lines = p.read_text(encoding="utf-8", errors="replace").splitlines() if p.exists() else []
+    text = p.read_text(encoding="utf-8", errors="replace") if p.exists() else ""
+    lines = text.splitlines()
+    torn_tail = bool(text) and not text.endswith("\n")
     for i, line in enumerate(lines):
         if not line.strip():
             continue
@@ -220,7 +254,7 @@ def read_ledger(out_dir: Path) -> dict[str, Any]:
             "unsettled_cny": round(unsettled, 6), "unsettled_requests": [{"id": r["id"], "code": r.get("code"), "stage": r.get("stage"),
                                                                        "reserved": r["reserved"], "at": r.get("at")} for r in open_],
             "requests": len(reserves), "attempts": companies,
-            "corrupt": any(i != last for i in bad), "bad_lines": len(bad)}
+            "corrupt": any(not (torn_tail and i == last) for i in bad), "bad_lines": len(bad)}
 
 
 class RunLock:
@@ -433,7 +467,7 @@ def score_company(rec: dict[str, Any], diag: DiagnosisResult) -> dict[str, Any]:
     res["C"]["cost_cny"] = rec["C"]["usage"].get("cost_cny_est", 0.0)
     res["C"]["elapsed_s"] = rec["C"]["elapsed_ms"] / 1000
     res["C"]["revised"] = bool(rec["C"].get("revised"))
-    res["C"]["revision_failed"] = any("修订请求失败" in w for w in rec["C"].get("warnings", []))
+    res["C"]["revision_failed"] = any(w.startswith("修订") for w in rec["C"].get("warnings", []))  # 修订请求失败 / 修订稿被截断
     return res
 
 

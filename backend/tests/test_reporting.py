@@ -165,3 +165,19 @@ def test_failed_revision_keeps_annotated_draft(diag):
     rep = generate_report(diag, llm=MockLLM(responder=responder), mode="llm")
     assert rep.mode == "llm" and rep.verification.unverified == 1
     assert any("保留初稿" in w for w in rep.warnings) and "⚠️〔未核验〕" in rep.annotated_markdown
+
+
+def test_truncated_revision_is_discarded_and_truncated_draft_is_flagged(diag):
+    good, _ = _good_sentence(diag)
+    bad = f"## 核心结论\n{good}市占率 37.5%。"
+    fixed = f"## 核心结论\n{good}"
+    # 修订稿被截断：即使它“问题更少”也不采用
+    rep = generate_report(diag, llm=MockLLM(script=[bad, LLMResponse(content=fixed, finish_reason="length")]), mode="llm")
+    assert not rep.revised and not rep.truncated and "37.5%" in rep.markdown
+    assert any("修订稿" in w for w in rep.warnings) and rep.verification.unverified == 1
+    # 初稿被截断但随后被完整的修订稿取代：最终采用的正文是完整的
+    rep = generate_report(diag, llm=MockLLM(script=[LLMResponse(content=bad, finish_reason="length"), fixed]), mode="llm")
+    assert rep.revised and not rep.truncated and not any("长度上限" in w for w in rep.warnings)
+    # 初稿被截断且无需修订：最终正文来自被截断的回复
+    rep = generate_report(diag, llm=MockLLM(script=[LLMResponse(content=fixed, finish_reason="length")]), mode="llm")
+    assert rep.truncated and any("长度上限" in w for w in rep.warnings)

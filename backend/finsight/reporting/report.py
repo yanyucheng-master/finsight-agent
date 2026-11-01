@@ -44,6 +44,7 @@ class Report(BaseModel):
     verification: VerificationResult
     attempts: int = 1
     revised: bool = False
+    truncated: bool = False  # 最终采用的正文是否来自被长度上限截断的回复（内容可能不完整）
     usage: dict[str, int | float] = Field(default_factory=dict)
     warnings: list[str] = Field(default_factory=list)
     generated_at: str
@@ -257,8 +258,7 @@ def generate_report(result: DiagnosisResult, *, llm: LLMClient | None = None, mo
             text = resp.content.strip()
             if not text:
                 raise LLMError("模型返回了空报告")
-            if resp.truncated:
-                warnings.append("模型输出达到长度上限，报告可能不完整")
+            truncated = bool(resp.truncated)
             v = verify(text, ctx.refs)
             emit(progress, "verifying", _verify_note(v))
             draft_text, draft_v = text, v
@@ -274,12 +274,17 @@ def generate_report(result: DiagnosisResult, *, llm: LLMClient | None = None, mo
                     break
                 meter.add(resp)
                 attempts += 1
+                if resp.truncated:  # 被截断的修订稿可能因为“少写了内容”而显得问题更少，不采用
+                    warnings.append("修订稿达到长度上限被截断，已放弃并保留上一版")
+                    break
                 new_text = resp.content.strip()
                 new_v = verify(new_text, ctx.refs)
                 emit(progress, "verifying", "修订稿：" + _verify_note(new_v))
                 # 只有修订确实减少了问题、且没有变成空文本才采用（防止越改越差）
                 if new_text and _issues(new_v) <= _issues(v):
-                    text, v, revised = new_text, new_v, True
+                    text, v, revised, truncated = new_text, new_v, True, False
+            if truncated:
+                warnings.append("模型输出达到长度上限，报告可能不完整")
             if v.problems:
                 warnings.append(f"仍有 {len(v.problems)} 个数字未通过核验，已在文中标注")
             warnings += v.consistency_flags
@@ -287,7 +292,7 @@ def generate_report(result: DiagnosisResult, *, llm: LLMClient | None = None, mo
             return Report(code=result.profile.code, name=result.profile.name, mode="llm",
                           model=getattr(llm, "model", None), markdown=text + note,
                           annotated_markdown=annotate(text, v) + note, data_asof=data_asof(result),
-                          draft_check=_draft_check(draft_v), draft_markdown=draft_text if revised else None,
+                          draft_check=_draft_check(draft_v), draft_markdown=draft_text if revised else None, truncated=truncated,
                           refs=refs_public, verification=v, attempts=attempts, revised=revised,
                           usage=meter.as_dict(), warnings=warnings, generated_at=now,
                           elapsed_ms=int((time.monotonic() - started) * 1000))
