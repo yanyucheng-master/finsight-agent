@@ -137,6 +137,11 @@ def create_app(settings: Settings | None = None, service: DataService | None = N
     def report(code: str, mode: str = Query("auto", pattern="^(auto|llm|template)$"),
                provider: str | None = Query(None, pattern="^(deepseek|kimi|intern)$")) -> Report:
         result = get_diag(code)
+        if settings.demo_mode and mode != "template":
+            # 同步接口不经过额度和并发控制：演示模式下只允许模板简报，大模型生成必须走 /report/jobs
+            if mode == "llm":
+                raise HTTPException(403, "演示模式下请使用 /api/companies/{code}/report/jobs 生成大模型简报（有次数限制）")
+            return generate_report(result, llm=None, mode="template")
         llm = get_llm(provider) if mode != "template" else None
         return generate_report(result, llm=llm, mode=mode)
 
@@ -144,6 +149,8 @@ def create_app(settings: Settings | None = None, service: DataService | None = N
     def ask(code: str, body: AskRequest) -> AgentAnswer:
         if not body.question.strip() or len(body.question) > 500:
             raise HTTPException(400, "问题不能为空且不超过 500 字")
+        if settings.demo_mode:  # 同步接口不经过额度和并发控制
+            raise HTTPException(403, "演示模式下请使用 /api/companies/{code}/ask/jobs 提问（有次数限制）")
         llm = get_llm(body.provider)
         if llm is None:
             raise HTTPException(503, "未配置大模型 API Key，问答功能不可用（体检与模板报告不受影响）")

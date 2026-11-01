@@ -254,20 +254,21 @@ def _eval_ablation(args: argparse.Namespace) -> int:
     if not cfg.enabled:
         print(f"未配置 {provider} 的 API Key（请先运行 scripts\\setup_env.bat）")
         return 1
-    ledger = ablation.read_ledger(out)
-    spent = ledger["total_cost_cny_est"]
-    if args.budget > 0:
-        if spent >= args.budget:
-            print(f"该目录已记账约 {spent:.2f} 元，达到或超过预算 {args.budget:.2f} 元，不再运行。")
-            return 1
-        os.environ["LLM_BUDGET_CNY"] = f"{args.budget - spent:.4f}"  # 预算按整个目录累计（含此前各次运行）
+    spent = ablation.read_ledger(out)["total_cost_cny_est"]
     try:
         llm = make_client(cfg)
     except LLMError as exc:
         print("大模型不可用：", exc)
         return 1
     print(f"评测②：{cfg.provider} / {cfg.model}，公司 {len(codes)} 家，预算 {args.budget or '不限'} 元（此前已记账约 {spent:.2f} 元），输出 {out}")
-    res = ablation.run_all(codes, diag_of, llm, out, model=cfg.model, workers=args.workers)
+    try:
+        res = ablation.run_all(codes, diag_of, llm, out, model=cfg.model, workers=args.workers, budget=args.budget)
+    except ablation.BudgetExhausted as exc:
+        print(f"{exc}，不再运行。")
+        return 1
+    except (ablation.RunBusy, RuntimeError) as exc:
+        print(exc)
+        return 1
     done = [c for c in codes if (out / "companies" / f"{c}.json").exists()]
     print(f"\n完成 {len(done)} / {len(codes)} 家；本目录累计估算花费 {res['total_cost_cny_est']:.2f} 元（客户端估算，以服务商控制台为准）")
     if res["stopped_by_budget"]:
@@ -281,7 +282,7 @@ def _eval_ablation(args: argparse.Namespace) -> int:
         print(f"抽检表：{out / 'audit_sheet.csv'}（用 Excel 打开，只填“判定”和“备注”两列）")
     else:
         missing = [c for c in codes if c not in done]
-        print(f"未完成：{', '.join(missing)}。重新运行同一命令会只补跑这些；全部完成后才会生成抽检表。")
+        print(f"未完成：{', '.join(missing)}。重新运行同一命令会只补跑这些（已完成的 A 组结果会复用）；全部完成后才会生成抽检表。")
     return 0 if complete else 2
 
 

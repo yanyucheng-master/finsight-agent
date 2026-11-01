@@ -7,15 +7,19 @@ from __future__ import annotations
 
 import csv
 import json
+import os
+import time
 
+import httpx
 import pytest
 
 from finsight.analytics.diagnosis import diagnose
 from finsight.cli import main as cli_main
-from finsight.config import load_settings
+from finsight.config import LLMSettings, load_settings
 from finsight.data.service import load_service
 from finsight.evaluation import ablation
-from finsight.llm.gateway import LLMError, MockLLM
+from finsight.llm import gateway as gw
+from finsight.llm.gateway import LLMError, LLMResponse, MockLLM, OpenAICompatibleClient
 from finsight.reporting.report import build_context
 
 SNAP = load_settings().snapshot_dir
@@ -68,50 +72,6 @@ def test_pure_prompt_gives_no_evidence_and_no_numbers(diag):
     assert "【证据清单】" not in pure[1]["content"]
     assert "%" not in pure[1]["content"] and "亿元" not in pure[1]["content"]  # 提示词里没有任何财务数字可抄
     assert "【证据清单】" in llm.requests[1]["messages"][1]["content"]  # C 组才给证据
-
-
-def test_run_all_saves_ledger_and_resumes(diag, tmp_path):
-    draft, fixed = _drafts(diag)
-    out = tmp_path / "ab"
-    logs: list[str] = []
-    res = ablation.run_all(["600519"], diag_of_factory(diag), MockLLM(script=[A_TEXT, draft, fixed]), out,
-                           model="mock-llm", workers=1, log=logs.append)
-    assert res["outcome"] == {"600519": "done"} and not res["stopped_by_budget"]
-    assert (out / "companies" / "600519.json").exists() and not list((out / "companies").glob("*.tmp"))
-    # 导出的 C 组简报可以直接入库为缓存样例（入库时用当前核验器重新核验）
-    from finsight.samples import build_report_sample
-    sample = build_report_sample(json.loads((out / "reports" / "600519.json").read_text(encoding="utf-8")), diag,
-                                 source="docs/eval/ablation-test/reports/600519.json")
-    assert sample["kind"] == "report" and sample["code"] == "600519"
-    ledger = json.loads((out / "ledger.json").read_text(encoding="utf-8"))
-    assert len(ledger["attempts"]) == 1 and ledger["total_cost_cny_est"] == res["total_cost_cny_est"] >= 0
-    # 断点续跑：已完成的不再调用模型（脚本为空，一调用就会抛 LLMError）
-    again = ablation.run_all(["600519"], diag_of_factory(diag), MockLLM(script=[]), out, model="mock-llm", workers=1,
-                             log=logs.append)
-    assert again["outcome"] == {"600519": "done"} and len(json.loads((out / "ledger.json").read_text("utf-8"))["attempts"]) == 1
-    assert any("跳过" in m for m in logs)
-
-
-def test_failed_company_goes_to_failed_dir_and_is_retried(diag, tmp_path):
-    out = tmp_path / "ab"
-    calls = {"n": 0}
-
-    def responder(messages, tools):
-        calls["n"] += 1
-        if calls["n"] == 1:
-            return A_TEXT  # A 组成功
-        raise LLMError("模拟：服务暂时不可用")  # C 组失败 → generate_report 降级为模板
-
-    res = ablation.run_all(["600519"], diag_of_factory(diag), MockLLM(responder=responder), out, model="mock-llm",
-                           workers=1, log=lambda m: None)
-    assert res["outcome"] == {"600519": "degraded"}
-    assert (out / "failed" / "600519.json").exists() and not (out / "companies").exists()
-    # 下次运行会重试（不会因为 failed/ 里有记录就跳过）
-    draft, fixed = _drafts(diag)
-    res2 = ablation.run_all(["600519"], diag_of_factory(diag), MockLLM(script=[A_TEXT, draft, fixed]), out,
-                            model="mock-llm", workers=1, log=lambda m: None)
-    assert res2["outcome"] == {"600519": "done"}
-    assert [a["status"] for a in json.loads((out / "ledger.json").read_text("utf-8"))["attempts"]] == ["degraded", "done"]
 
 
 def test_budget_guard_stops_remaining_companies(diag, tmp_path):
@@ -197,21 +157,282 @@ def test_cli_score_and_missing_key(diag, tmp_path, monkeypatch, capsys):
     assert "未配置" in capsys.readouterr().out
 
 
-def test_budget_is_cumulative_per_directory(diag, tmp_path, monkeypatch, capsys):
+# ------------------------------------------------------------------ 费用账本 / 断点续跑 / 无效输出（评审指出的问题）
+
+class Killed(BaseException):
+    """模拟进程在请求途中被杀（BaseException：不会被 `except Exception` 吞掉）。"""
+
+
+def _run(diag, llm, out, **kw):
+    kw.setdefault("workers", 1)
+    kw.setdefault("log", lambda m: None)
+    return ablation.run_all(["600519"], diag_of_factory(diag), llm, out, model="mock-llm", **kw)
+
+
+def _real_client(handler) -> OpenAICompatibleClient:
+    cfg = LLMSettings(provider="kimi", base_url="https://llm.test/v1", api_key="sk-test", model="kimi-k3.1-pro",
+                      reasoning_effort="low")
+    return OpenAICompatibleClient(cfg, transport=httpx.MockTransport(handler), backoff_s=0)
+
+
+def _chat_ok(text, usage=None, finish="stop") -> httpx.Response:
+    return httpx.Response(200, json={"model": "kimi-k3.1-pro", "usage": usage or {"prompt_tokens": 2000, "completion_tokens": 1500},
+                                     "choices": [{"index": 0, "message": {"role": "assistant", "content": text},
+                                                  "finish_reason": finish}]})
+
+
+def _is_a(request: httpx.Request) -> bool:
+    return json.loads(request.content)["messages"][0]["content"] == ablation.PURE_SYSTEM
+
+
+@pytest.fixture
+def guard(monkeypatch):
+    monkeypatch.setattr(gw, "BUDGET", gw.BudgetGuard())  # 每个测试一个新的进程级保护，互不影响
+    monkeypatch.delenv("LLM_BUDGET_CNY", raising=False)
+    return gw.BUDGET
+
+
+def test_run_all_saves_results_and_resumes_without_new_requests(diag, tmp_path):
+    draft, fixed = _drafts(diag)
+    out = tmp_path / "ab"
+    logs: list[str] = []
+    res = _run(diag, MockLLM(script=[A_TEXT, draft, fixed]), out, log=logs.append)
+    assert res["outcome"] == {"600519": "done"} and not res["stopped_by_budget"]
+    assert (out / "companies" / "600519.json").exists() and not list(out.rglob("*.tmp")) and not (out / "run.lock").exists()
+    from finsight.samples import build_report_sample  # 导出的 C 组简报可直接入库为缓存样例
+    sample = build_report_sample(json.loads((out / "reports" / "600519.json").read_text(encoding="utf-8")), diag,
+                                 source="docs/eval/ablation-test/reports/600519.json")
+    assert sample["kind"] == "report" and sample["code"] == "600519"
+    ledger = ablation.read_ledger(out)
+    assert [a["status"] for a in ledger["attempts"]] == ["done"]
+    again = MockLLM(script=[])  # 已完成的不再发送任何请求
+    assert _run(diag, again, out, log=logs.append)["outcome"] == {"600519": "done"} and not again.requests
+    assert any("跳过" in m for m in logs)
+
+
+def test_every_request_is_journaled_before_sending_and_failures_are_charged(diag, tmp_path, guard):
+    """A 成功后 C 的各次尝试都 HTTP 500（服务端拒绝，不计费）：账本 = A 的真实用量；每次发送都有记录。"""
+    out, seen = tmp_path / "ab", []
+
+    def handler(request):
+        # 发送时账本里这次请求的 reserve 必须已经落盘
+        seen.append(ablation.read_ledger(out)["requests"])
+        return _chat_ok(A_TEXT) if _is_a(request) else httpx.Response(500, text="boom")
+
+    res = _run(diag, _real_client(handler), out)
+    assert res["outcome"] == {"600519": "degraded"}
+    assert seen == [1, 2, 3, 4, 5]  # A 一次 + C 重试 4 次，每次发送时账本都已多一条
+    led = ablation.read_ledger(out)
+    assert led["requests"] == 5 and not led["unsettled_requests"] and not led["corrupt"]
+    a_cost = gw.estimate_cost_cny("kimi-k3.1-pro", {"prompt_tokens": 2000, "completion_tokens": 1500})
+    assert led["total_cost_cny_est"] == pytest.approx(a_cost) == pytest.approx(guard.spent)
+    stages = [json.loads(line).get("stage") for line in (out / "ledger.jsonl").read_text("utf-8").splitlines()
+              if json.loads(line)["ev"] == "reserve"]
+    assert stages == ["A", "C", "C", "C", "C"]
+
+
+def test_timeout_is_charged_at_upper_bound(diag, tmp_path, guard):
+    n = {"c": 0}
+
+    def handler(request):
+        if _is_a(request):
+            return _chat_ok(A_TEXT)
+        n["c"] += 1
+        if n["c"] == 1:
+            raise httpx.ReadTimeout("timed out", request=request)  # 服务端可能已经计费
+        return _chat_ok(_drafts(diag)[1])
+
+    _run(diag, _real_client(handler), tmp_path / "ab")
+    led = ablation.read_ledger(tmp_path / "ab")
+    a_cost = gw.estimate_cost_cny("kimi-k3.1-pro", {"prompt_tokens": 2000, "completion_tokens": 1500})
+    assert led["total_cost_cny_est"] == pytest.approx(guard.spent) and led["total_cost_cny_est"] > 2 * a_cost
+    settles = [json.loads(line) for line in (tmp_path / "ab" / "ledger.jsonl").read_text("utf-8").splitlines()
+               if json.loads(line)["ev"] == "settle"]
+    assert [s["exact"] for s in settles] == [True, False, True]  # 超时那次不是精确值
+
+
+def test_killed_mid_request_keeps_reservation_and_resume_reuses_finished_stage(diag, tmp_path, guard, monkeypatch):
+    out = tmp_path / "ab"
+
+    def handler(request):
+        if _is_a(request):
+            return _chat_ok(A_TEXT)
+        raise Killed()  # C 的请求发出后进程被杀：没有结算
+
+    with pytest.raises(Killed):
+        _run(diag, _real_client(handler), out)
+    assert not (out / "run.lock").exists()  # 锁随运行结束释放
+    led = ablation.read_ledger(out)
+    assert len(led["unsettled_requests"]) == 1 and led["unsettled_requests"][0]["stage"] == "C"
+    assert led["unsettled_cny"] > 0 and led["total_cost_cny_est"] == pytest.approx(led["settled_cny"] + led["unsettled_cny"])
+    assert (out / "partial" / "600519.json").exists() and not (out / "companies").exists()
+
+    # 恢复：新进程、新的保护；A 组结果直接复用（不再发 A 请求），未结算的占用计入累计
+    monkeypatch.setattr(gw, "BUDGET", gw.BudgetGuard())
+    sent = []
+
+    def handler2(request):
+        sent.append(_is_a(request))
+        return _chat_ok(_drafts(diag)[1])
+
+    logs: list[str] = []
+    res = _run(diag, _real_client(handler2), out, budget=50.0, log=logs.append)
+    assert res["outcome"] == {"600519": "done"} and sent == [False]
+    assert any("没有结算记录" in m for m in logs)
+    assert ablation.read_ledger(out)["unsettled_requests"]  # 上次那笔仍保留，直到用户对照账单
+    assert "LLM_BUDGET_CNY" not in os.environ  # 进程环境不留尾巴
+
+
+def test_budget_is_cumulative_per_directory_across_runs(diag, tmp_path, guard):
     out = tmp_path / "ab"
     out.mkdir()
-    (out / "ledger.json").write_text(json.dumps({"attempts": [], "total_cost_cny_est": 9.5}), encoding="utf-8")
+    j = ablation.Journal(out / "ledger.jsonl")
+    j.append({"ev": "reserve", "id": "x1", "reserved": 9.6, "code": "600519", "stage": "C"})
+    j.append({"ev": "settle", "id": "x1", "charged": 9.5, "exact": True})
+    never = MockLLM(responder=lambda m, t: (_ for _ in ()).throw(AssertionError("预算已用完，不应发送请求")))
+    with pytest.raises(ablation.BudgetExhausted, match="9.50"):
+        _run(diag, never, out, budget=9.0)
+    # 预算还剩一点：进程内保护按“剩余额度”设置，更大的请求会在发出前被拒绝
+    j.append({"ev": "reserve", "id": "x2", "reserved": 0.0, "code": "600519", "stage": "C"})
+    sent = []
+
+    def handler(request):
+        sent.append(1)
+        return _chat_ok(A_TEXT)
+
+    res = _run(diag, _real_client(handler), out, budget=9.51)
+    assert res["stopped_by_budget"] and not sent and res["outcome"]["600519"] == "error"
+
+
+def test_ledger_write_failure_blocks_sending(diag, tmp_path, guard, monkeypatch):
+    sent = []
+
+    def handler(request):
+        sent.append(1)
+        return _chat_ok(A_TEXT)
+
+    def boom(self, rec):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(ablation.Journal, "append", boom)
+    _run(diag, _real_client(handler), tmp_path / "ab")
+    assert not sent  # 账本写不进去，一个请求也不发
+
+
+def test_corrupt_ledger_refuses_but_torn_last_line_is_ignored(diag, tmp_path, guard):
+    out = tmp_path / "ab"
+    out.mkdir()
+    ok_line = json.dumps({"ev": "reserve", "id": "a", "reserved": 0.1})
+    (out / "ledger.jsonl").write_text(ok_line + '\n{"ev": "settle", "id": "a", "char', encoding="utf-8")  # 最后一行写了一半
+    assert not ablation.read_ledger(out)["corrupt"]
+    (out / "ledger.jsonl").write_text(ok_line + "\n乱码一行\n" + ok_line.replace('"a"', '"b"') + "\n", encoding="utf-8")
+    assert ablation.read_ledger(out)["corrupt"]
+    with pytest.raises(RuntimeError, match="损坏"):
+        _run(diag, MockLLM(script=[]), out)
+
+
+def test_two_runs_cannot_share_a_directory_and_stale_lock_is_taken_over(tmp_path):
+    out = tmp_path / "ab"
+    with ablation.RunLock(out):
+        with pytest.raises(ablation.RunBusy):
+            with ablation.RunLock(out):
+                pass
+    assert not (out / "run.lock").exists()
+    (out / "run.lock").write_text("pid=1", encoding="utf-8")
+    old = time.time() - 600
+    os.utime(out / "run.lock", (old, old))  # 遗留的旧锁（进程崩溃）
+    with ablation.RunLock(out, stale_s=120):
+        assert (out / "run.lock").exists()
+    (out / "run.lock").write_text("pid=1", encoding="utf-8")  # 刚更新过的锁 = 另一个运行还活着
+    with pytest.raises(ablation.RunBusy):
+        with ablation.RunLock(out):
+            pass
+
+
+def test_empty_or_truncated_a_is_invalid_and_c_is_not_run(diag, tmp_path):
+    for bad in (LLMResponse(content="", finish_reason="stop"), LLMResponse(content="半截内容", finish_reason="length")):
+        out = tmp_path / f"ab{bool(bad.content)}"
+        llm = MockLLM(script=[bad])
+        res = _run(diag, llm, out)
+        assert res["outcome"] == {"600519": "a_invalid"} and len(llm.requests) == 1  # 没有再为 C 组花钱
+        assert (out / "failed" / "600519.json").exists() and not (out / "companies").exists()
+        assert not (out / "partial" / "600519.json").exists()  # 无效的 A 不保存，下次重新发 A
+
+
+def test_degraded_c_keeps_a_and_retry_only_reruns_c(diag, tmp_path):
+    out, calls = tmp_path / "ab", {"n": 0}
+
+    def responder(messages, tools):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return A_TEXT
+        raise LLMError("模拟：服务暂时不可用")  # C 组失败 → generate_report 降级为模板
+
+    res = _run(diag, MockLLM(responder=responder), out)
+    assert res["outcome"] == {"600519": "degraded"}
+    assert (out / "failed" / "600519.json").exists() and (out / "partial" / "600519.json").exists()
+    assert not (out / "companies").exists()
+    draft, fixed = _drafts(diag)
+    retry = MockLLM(script=[draft, fixed])  # 只剩 C 组的两次请求；A 不会再发
+    assert _run(diag, retry, out)["outcome"] == {"600519": "done"}
+    assert len(retry.requests) == 2 and "【证据清单】" in retry.requests[0]["messages"][1]["content"]
+    assert [a["status"] for a in ablation.read_ledger(out)["attempts"]] == ["degraded", "done"]
+
+
+def test_truncated_c_is_excluded_and_revision_failure_is_flagged(diag, tmp_path):
+    draft, fixed = _drafts(diag)
+    out = tmp_path / "trunc"
+    res = _run(diag, MockLLM(script=[A_TEXT, LLMResponse(content=fixed, finish_reason="length")]), out)
+    assert res["outcome"] == {"600519": "c_truncated"} and (out / "failed" / "600519.json").exists()
+
+    out2, n = tmp_path / "revfail", {"n": 0}
+
+    def responder(messages, tools):
+        n["n"] += 1
+        if n["n"] == 1:
+            return A_TEXT
+        if n["n"] == 2:
+            return draft  # 初稿含无证据数字，触发修订
+        raise LLMError("模拟：修订请求失败")
+
+    assert _run(diag, MockLLM(responder=responder), out2)["outcome"] == {"600519": "done"}  # 初稿保留，仍是有效记录
+    r = ablation.score_dir(out2, diag_of_factory(diag), make_audit=False)
+    assert r["summary"]["revision_failed_reports"] == 1 and r["per_company"][0]["B"]["problems"] == 1
+
+
+def test_score_dir_excludes_invalid_records_and_states_prompt_difference(diag, tmp_path):
+    draft, fixed = _drafts(diag)
+    out = tmp_path / "ab"
+    _run(diag, MockLLM(script=[A_TEXT, draft, fixed]), out)
+    bad = json.loads((out / "companies" / "600519.json").read_text(encoding="utf-8"))
+    bad.update(code="000858", name="五粮液")
+    bad["A"]["text"] = ""  # 手工放进去的无效记录（A 为空）
+    (out / "companies" / "000858.json").write_text(json.dumps(bad, ensure_ascii=False), encoding="utf-8")
+    r = ablation.score_dir(out, diag_of_factory(diag), make_audit=False)
+    assert r["summary"]["companies"] == 1 and r["summary"]["excluded"][0]["code"] == "000858"
+    report = (out / "ablation_report.md").read_text(encoding="utf-8")
+    assert "提示词不同" in report and "000858" in report and "同一提示词" not in report
+    meta = json.loads((out / "ablation.json").read_text(encoding="utf-8"))["meta"]
+    assert meta["prompts"]["A_system"] == ablation.PURE_SYSTEM and meta["prompts"]["C_system_sha256"]
+    (out / "companies" / "600519.json").write_text(json.dumps(bad, ensure_ascii=False), encoding="utf-8")
+    with pytest.raises(Exception, match="有效记录"):
+        ablation.score_dir(out, diag_of_factory(diag), make_audit=False)
+
+
+def test_cli_refuses_when_directory_budget_is_used_up(diag, tmp_path, monkeypatch, capsys):
+    out = tmp_path / "ab"
+    out.mkdir()
+    j = ablation.Journal(out / "ledger.jsonl")
+    j.append({"ev": "reserve", "id": "x1", "reserved": 9.6})
+    j.append({"ev": "settle", "id": "x1", "charged": 9.5, "exact": True})
 
     class Cfg:
         enabled = True
         provider = "kimi"
         model = "kimi-k3.1-pro"
 
+    never = MockLLM(responder=lambda m, t: (_ for _ in ()).throw(AssertionError("预算已用完，不应发送请求")))
     monkeypatch.setattr("finsight.config.llm_settings", lambda provider=None: Cfg())
-
-    def never(*a, **k):
-        raise AssertionError("预算已用完，不应创建客户端")
-
-    monkeypatch.setattr("finsight.llm.gateway.make_client", never)
+    monkeypatch.setattr("finsight.llm.gateway.make_client", lambda cfg: never)
     assert cli_main(["eval", "ablation", "--out", str(out), "--budget", "9"]) == 1
-    assert "不再运行" in capsys.readouterr().out
+    assert "不再运行" in capsys.readouterr().out and not never.requests

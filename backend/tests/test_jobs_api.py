@@ -188,3 +188,20 @@ def test_limiter_persists_and_rolls_over(tmp_path, monkeypatch):
     monkeypatch.setattr(DemoLimiter, "_today", staticmethod(lambda: "2099-01-01"))
     again.reserve("a")
     assert again.status("a")["daily_used"] == 1
+
+
+def test_synchronous_endpoints_cannot_bypass_demo_limits(svc, code, tmp_path):
+    """演示模式下，同步接口不经过额度和并发控制，所以不允许调用大模型。"""
+    llm = MockLLM(responder=lambda m, t: (_ for _ in ()).throw(AssertionError("演示模式的同步接口不应调用大模型")))
+    client = _app(svc, tmp_path, llm, demo_mode=True, live_per_ip_daily=1, live_daily_limit=5)
+    assert client.post(f"/api/companies/{code}/report?mode=llm").status_code == 403
+    assert client.post(f"/api/companies/{code}/ask", json={"question": "毛利率多少？"}).status_code == 403
+    auto = client.post(f"/api/companies/{code}/report?mode=auto")  # auto 在演示模式下只给模板简报
+    assert auto.status_code == 200 and auto.json()["mode"] == "template"
+    assert client.post(f"/api/companies/{code}/report?mode=template").json()["mode"] == "template"
+    assert not llm.requests and client.get("/api/demo").json()["live"]["daily_used"] == 0
+
+
+def test_synchronous_endpoints_still_work_outside_demo_mode(svc, code, tmp_path):
+    client = _app(svc, tmp_path, MockLLM(script=[_good_text(svc, code)]))
+    assert client.post(f"/api/companies/{code}/report?mode=llm").json()["mode"] == "llm"

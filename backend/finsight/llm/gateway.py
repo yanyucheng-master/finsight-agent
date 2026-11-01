@@ -15,6 +15,7 @@ import json
 import os
 import threading
 import time
+import uuid
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol
@@ -94,6 +95,16 @@ class BudgetGuard:
         self.pending = 0.0
         self.calls = 0
         self._lock = threading.Lock()
+        self._tl = threading.local()  # 每个线程同一时刻只有一次发送在途：reserve 压栈、settle 出栈
+        self.listeners: list[Callable[[dict[str, Any]], None]] = []
+
+    def add_listener(self, fn: Callable[[dict[str, Any]], None]) -> Callable[[], None]:
+        """登记账本监听器（评测脚本用它把每次发送持久化）。返回取消登记的函数。
+
+        reserve 事件在请求发出**之前**调用，监听器抛异常 = 拒绝发送（账本写不进去就不花钱）；
+        settle 事件在结算之后调用，监听器出错不影响调用方（该笔预留在账本里保持“未结算”，按上界计）。"""
+        self.listeners.append(fn)
+        return lambda: self.listeners.remove(fn) if fn in self.listeners else None
 
     @property
     def limit(self) -> float:
@@ -113,15 +124,32 @@ class BudgetGuard:
             if limit > 0 and self.spent + self.pending + amount > limit:
                 raise LLMError(f"费用保护：已估算花费 {self.spent:.4f} 元（另有 {self.pending:.4f} 元进行中），"
                                f"本次请求最多可能再花 {amount:.4f} 元，将超过预算 {limit:.2f} 元（LLM_BUDGET_CNY），已停止发送")
+            rid = uuid.uuid4().hex[:12]
+            for fn in list(self.listeners):  # 先持久化占用，再发送
+                try:
+                    fn({"ev": "reserve", "id": rid, "model": model, "reserved": amount})
+                except Exception as exc:  # noqa: BLE001
+                    raise LLMError(f"费用保护：无法持久化本次请求的费用占用（{type(exc).__name__}: {exc}），已停止发送") from exc
             self.pending += amount
+            stack = self._tl.__dict__.setdefault("stack", [])
+            stack.append(rid)
         return amount
 
     def settle(self, reserved: float, actual: float | None) -> None:
         """actual=None 表示费用不明，按预留上界记账。"""
         with self._lock:
             self.pending -= reserved
-            self.spent += reserved if actual is None else actual
+            charged = reserved if actual is None else actual
+            self.spent += charged
             self.calls += 1
+            stack = self._tl.__dict__.get("stack") or []
+            rid = stack.pop() if stack else None
+        if rid is not None:
+            for fn in list(self.listeners):
+                try:
+                    fn({"ev": "settle", "id": rid, "charged": charged, "exact": actual is not None})
+                except Exception:  # noqa: BLE001 —— 结算记录写不进去：账本里保持未结算，按预留上界计
+                    pass
 
 
 BUDGET = BudgetGuard()

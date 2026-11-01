@@ -7,6 +7,8 @@
 * B 有证据、无核验：给证据清单并要求引用，但**不经核验器**——取 C 的初稿（`Report.draft_markdown`）。
 * C 完整 FinSight：有证据 + 核验器打回修订，取终稿。
 B 与 C 共用同一次生成（B 就是 C 的初稿），所以对比是配对的，成本也不用重复付。
+注意：A 与 B/C 的**提示词不同**（A 只有简短的任务说明；B/C 用 FinSight 的系统提示、证据清单和写作规则），
+这是实验干预的一部分，解释 A 与 B/C 的差距时不能全部归因于“证据”；B 与 C 的差别才只来自核验器。
 
 指标与口径（务必如实写进报告）
 * “问题数字”：A 组没有引用，按“在该公司全部证据里找不到唯一可信归属”计；B/C 组按“不一致 / 引用无效 / 无证据”计。
@@ -20,6 +22,7 @@ B 与 C 共用同一次生成（B 就是 C 的初稿），所以对比是配对�
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import math
 import os
@@ -28,12 +31,14 @@ import threading
 import time
 from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from finsight.analytics.diagnosis import DiagnosisResult
 from finsight.domain import Evidence, fmt_value
+from finsight.llm import gateway as gw
 from finsight.llm.gateway import LLMClient, LLMError, UsageMeter
 from finsight.reporting.report import generate_report
 from finsight.reporting.verifier import Claim, verify
@@ -59,22 +64,91 @@ def pure_prompt(name: str, code: str, year: str) -> str:
 
 # ------------------------------------------------------------------ 运行（会调用大模型）
 
-def run_company(diag: DiagnosisResult, llm: LLMClient, *, model: str) -> dict[str, Any]:
-    """对一家公司跑 A 组与 C 组（含 B 初稿）。返回可直接存盘、之后可离线重新打分的原始记录。"""
-    code, name = diag.profile.code, diag.profile.name
-    period = diag.periods[0].end
-    rec: dict[str, Any] = {"code": code, "name": name, "period": period, "model": model,
-                           "started": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
+class InvalidOutput(RuntimeError):
+    """A 组输出无效（空 / 被截断）：不再继续花钱跑 C 组，也不计入评测。"""
+
+    def __init__(self, message: str, a: dict[str, Any]):
+        super().__init__(message)
+        self.a = a
+
+
+class RunBusy(RuntimeError):
+    """同一输出目录已有另一个运行在进行（防止双击两次导致预算重复使用）。"""
+
+
+class BudgetExhausted(RuntimeError):
+    pass
+
+
+_ctx = threading.local()  # 当前线程正在处理的公司 / 阶段，写进账本便于对账
+
+
+@contextmanager
+def _stage(code: str, stage: str):
+    old = (getattr(_ctx, "code", None), getattr(_ctx, "stage", None))
+    _ctx.code, _ctx.stage = code, stage
+    try:
+        yield
+    finally:
+        _ctx.code, _ctx.stage = old
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def a_problem(a: dict[str, Any]) -> str | None:
+    if not str(a.get("text", "")).strip():
+        return "A 组输出为空"
+    if a.get("truncated"):
+        return "A 组输出达到长度上限被截断，内容可能不完整"
+    return None
+
+
+def rec_problem(rec: dict[str, Any]) -> tuple[str, str] | None:
+    """一条原始记录能否进入评测。返回 (类别, 原因)；None 表示有效。"""
+    bad = a_problem(rec["A"])
+    if bad:
+        return "a_invalid", bad
+    c = rec["C"]
+    if c.get("mode") != "llm":
+        return "degraded", "完整流程降级为模板：" + "；".join(c.get("warnings", []))[:150]
+    if any("长度上限" in w for w in c.get("warnings", [])):
+        return "c_truncated", "C 组输出达到长度上限被截断，内容可能不完整"
+    return None
+
+
+def run_a(diag: DiagnosisResult, llm: LLMClient, *, model: str) -> dict[str, Any]:
     meter = UsageMeter()
     t0 = time.monotonic()
     resp = llm.chat([{"role": "system", "content": PURE_SYSTEM},
-                     {"role": "user", "content": pure_prompt(name, code, period[:4])}])
+                     {"role": "user", "content": pure_prompt(diag.profile.name, diag.profile.code, diag.periods[0].end[:4])}])
     meter.add(resp)
-    rec["A"] = {"text": resp.content.strip(), "truncated": bool(resp.truncated), "usage": meter.as_dict(),
-                "elapsed_ms": int((time.monotonic() - t0) * 1000)}
-    rep = generate_report(diag, llm=llm, mode="llm")
-    rec["C"] = rep.model_dump(mode="json")
-    return rec
+    return {"text": resp.content.strip(), "truncated": bool(resp.truncated), "usage": meter.as_dict(),
+            "elapsed_ms": int((time.monotonic() - t0) * 1000), "model": model, "at": _now()}
+
+
+def run_company(diag: DiagnosisResult, llm: LLMClient, *, model: str, a_done: dict[str, Any] | None = None,
+                on_a: Callable[[dict[str, Any]], None] | None = None) -> dict[str, Any]:
+    """对一家公司跑 A 组与 C 组（含 B 初稿）。返回可直接存盘、之后可离线重新打分的原始记录。
+
+    A 组先跑并立刻交给 on_a 存盘（断点续跑时 a_done 直接复用，不再重复付费）；A 为空或被截断时抛 InvalidOutput，
+    不再继续跑 C 组。C 组降级 / 截断的记录照常返回，由调用方用 rec_problem 判断是否有效。"""
+    code, name, period = diag.profile.code, diag.profile.name, diag.periods[0].end
+    if a_done is None:
+        with _stage(code, "A"):
+            a = run_a(diag, llm, model=model)
+        bad = a_problem(a)
+        if bad:
+            raise InvalidOutput(bad, a)
+        if on_a:
+            on_a(a)
+    else:
+        a = a_done
+    with _stage(code, "C"):
+        rep = generate_report(diag, llm=llm, mode="llm")
+    return {"code": code, "name": name, "period": period, "model": model, "started": a.get("at", _now()),
+            "A": a, "C": rep.model_dump(mode="json")}
 
 
 def _atomic_write(path: Path, text: str) -> None:
@@ -88,72 +162,237 @@ def _rec_cost(rec: dict[str, Any]) -> float:
     return round(float(rec["A"]["usage"].get("cost_cny_est", 0.0)) + float(rec["C"].get("usage", {}).get("cost_cny_est", 0.0)), 6)
 
 
+# ---- 费用账本：追加写的 ledger.jsonl（每行 fsync），请求发出之前先落盘，结算后再追加一行
+
+class Journal:
+    """账本是唯一的事实来源：reserve（发送前的占用上界）→ settle（结算）。
+    只有 reserve 没有 settle 的请求 = 进程中途被杀 / 关窗，服务端可能已经计费，按占用上界计入累计，
+    直到用户对照服务商账单核对。服务商账单才是实际扣费的依据，这里只是客户端的保守估算。"""
+
+    def __init__(self, path: Path):
+        self.path, self._lock = path, threading.Lock()
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+    def append(self, rec: dict[str, Any]) -> None:
+        line = (json.dumps({**rec, "at": _now()}, ensure_ascii=False) + "\n").encode("utf-8")
+        with self._lock:
+            fd = os.open(self.path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, "O_BINARY", 0), 0o644)  # Windows：二进制模式，不改换行
+            try:
+                os.write(fd, line)
+                os.fsync(fd)
+            finally:
+                os.close(fd)
+
+    def listener(self, event: dict[str, Any]) -> None:
+        self.append({**event, "code": getattr(_ctx, "code", None), "stage": getattr(_ctx, "stage", None)})
+
+
 def read_ledger(out_dir: Path) -> dict[str, Any]:
-    p = out_dir / "ledger.json"
-    if p.exists():
-        return json.loads(p.read_text(encoding="utf-8"))
-    return {"note": "费用为客户端按返回用量和价格表的估算，不是服务商账单；以服务商控制台为准", "attempts": [], "total_cost_cny_est": 0.0}
+    """从 ledger.jsonl 重算累计费用。最后一行写了一半（崩溃时）可以忽略——那条 reserve 还没发出请求；
+    中间有读不懂的行说明账本损坏，corrupt=True，调用方应拒绝继续花钱。"""
+    p = out_dir / "ledger.jsonl"
+    reserves: dict[str, dict] = {}
+    settles: dict[str, dict] = {}
+    companies: list[dict] = []
+    bad: list[int] = []
+    lines = p.read_text(encoding="utf-8", errors="replace").splitlines() if p.exists() else []
+    for i, line in enumerate(lines):
+        if not line.strip():
+            continue
+        try:
+            r = json.loads(line)
+            ev = r["ev"]
+        except (ValueError, KeyError, TypeError):
+            bad.append(i)
+            continue
+        if ev == "reserve":
+            reserves[r["id"]] = r
+        elif ev == "settle":
+            settles[r["id"]] = r
+        elif ev == "company":
+            companies.append(r)
+    settled = sum(float(settles[i]["charged"]) for i in reserves if i in settles)
+    open_ = [r for i, r in reserves.items() if i not in settles]
+    unsettled = sum(float(r["reserved"]) for r in open_)
+    last = len(lines) - 1
+    return {"note": "费用为客户端估算（按返回用量 / 价格表；响应不明或未结算的请求按占用上界计），不是服务商账单；以服务商控制台为准",
+            "total_cost_cny_est": round(settled + unsettled, 6), "settled_cny": round(settled, 6),
+            "unsettled_cny": round(unsettled, 6), "unsettled_requests": [{"id": r["id"], "code": r.get("code"), "stage": r.get("stage"),
+                                                                       "reserved": r["reserved"], "at": r.get("at")} for r in open_],
+            "requests": len(reserves), "attempts": companies,
+            "corrupt": any(i != last for i in bad), "bad_lines": len(bad)}
+
+
+class RunLock:
+    """同一输出目录同时只允许一个运行：run.lock 由运行中的进程定期“摸一下”，超过 stale_s 没动静视为遗留（崩溃 / 被杀）。"""
+
+    def __init__(self, out_dir: Path, *, stale_s: float = 120.0, beat_s: float = 20.0):
+        self.path, self.stale_s, self.beat_s = out_dir / "run.lock", stale_s, beat_s
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+
+    def __enter__(self) -> RunLock:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        for _ in range(3):
+            try:
+                fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_BINARY", 0))
+            except FileExistsError:
+                try:
+                    age = time.time() - self.path.stat().st_mtime
+                except FileNotFoundError:
+                    continue
+                if age < self.stale_s:
+                    raise RunBusy(f"{self.path.parent} 已有另一个评测在运行（run.lock {age:.0f} 秒前更新过）。"
+                                  "请等它结束；如果确认没有在运行，等约 2 分钟后重试。") from None
+                try:
+                    self.path.unlink()
+                except FileNotFoundError:
+                    pass
+                continue
+            os.write(fd, f"pid={os.getpid()} at={_now()}".encode())
+            os.close(fd)
+            break
+        else:
+            raise RunBusy(f"无法获得 {self.path}")
+
+        def beat() -> None:
+            while not self._stop.wait(self.beat_s):
+                try:
+                    os.utime(self.path)
+                except OSError:
+                    pass
+
+        self._thread = threading.Thread(target=beat, daemon=True)
+        self._thread.start()
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self._stop.set()
+        try:
+            self.path.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def _load_partial_a(path: Path, code: str, model: str) -> dict[str, Any] | None:
+    try:
+        d = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    a = d.get("A")
+    if d.get("code") != code or d.get("model") != model or not isinstance(a, dict) or a_problem(a):
+        return None
+    return a
 
 
 def run_all(codes: Sequence[str], diag_of: Callable[[str], DiagnosisResult], llm: LLMClient, out_dir: Path, *,
-            model: str, workers: int = 2, log: Callable[[str], None] = print) -> dict[str, Any]:
-    """逐家运行并立即存盘（断点续跑：已有 companies/{code}.json 的跳过）。
+            model: str, workers: int = 2, budget: float = 0.0, log: Callable[[str], None] = print) -> dict[str, Any]:
+    """逐家运行并立即存盘（断点续跑：已有 companies/{code}.json 的跳过；已完成的 A 组存在 partial/ 里，不再重复发送）。
 
-    * 费用保护触发（LLM_BUDGET_CNY）后不再启动新的公司，已完成的结果保留；
-    * 模型失败、简报降级为模板的结果存到 failed/，不计入评测，下次运行会重试；
-    * 每次尝试（成功或失败）的估算花费记入 ledger.json。
-    """
-    companies, failed = out_dir / "companies", out_dir / "failed"
-    ledger, lock, stop = read_ledger(out_dir), threading.Lock(), threading.Event()
+    * 同一目录同时只允许一个运行（run.lock）；
+    * 每次发送前先把费用占用写入 ledger.jsonl（写不进去就不发送），结算后再追加；`budget`>0 时按整个目录累计，
+      剩余额度同步给进程内的 LLM_BUDGET_CNY；
+    * 费用保护触发后不再启动新的公司；A 为空 / 被截断、C 降级为模板或被截断的结果存到 failed/，不计入评测，下次重试；
+    * 一家公司出错不拖垮整批。"""
+    companies, failed, partial = out_dir / "companies", out_dir / "failed", out_dir / "partial"
     todo = [c for c in codes if not (companies / f"{c}.json").exists()]
     skipped = [c for c in codes if c not in todo]
-    if skipped:
-        log(f"已有结果，跳过：{', '.join(skipped)}")
     outcome: dict[str, str] = {c: "done" for c in skipped}
+    stop = threading.Event()
+    with RunLock(out_dir):
+        ledger = read_ledger(out_dir)
+        if ledger["corrupt"]:
+            raise RuntimeError(f"{out_dir / 'ledger.jsonl'} 中间有读不懂的行，账本可能损坏，无法保证累计费用，已拒绝继续（请把该文件发给开发会话）")
+        if ledger["unsettled_requests"]:
+            log(f"注意：账本里有 {len(ledger['unsettled_requests'])} 笔请求发出后没有结算记录（可能是上次中途关窗），"
+                f"已按占用上界计入累计 {ledger['unsettled_cny']:.2f} 元；请以服务商账单核对。")
+        old_budget = os.environ.get("LLM_BUDGET_CNY")
+        if budget > 0:
+            remaining = budget - ledger["total_cost_cny_est"]
+            if remaining <= 0:
+                raise BudgetExhausted(f"该目录已记账约 {ledger['total_cost_cny_est']:.2f} 元，达到或超过预算 {budget:.2f} 元")
+            os.environ["LLM_BUDGET_CNY"] = f"{remaining:.4f}"  # 预算按整个目录累计（含此前各次运行）
+        journal = Journal(out_dir / "ledger.jsonl")
+        remove = gw.BUDGET.add_listener(journal.listener)
+        lock = threading.Lock()
 
-    def settle(code: str, status: str, cost: float, detail: str = "") -> None:
-        with lock:
-            ledger["attempts"].append({"code": code, "status": status, "cost_cny_est": cost, "detail": detail[:300],
-                                       "at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")})
-            ledger["total_cost_cny_est"] = round(sum(a["cost_cny_est"] for a in ledger["attempts"]), 6)
-            _atomic_write(out_dir / "ledger.json", json.dumps(ledger, ensure_ascii=False, indent=1))
-            outcome[code] = status
+        def finish(code: str, status: str, detail: str = "") -> None:
+            with lock:
+                outcome[code] = status
+                try:
+                    journal.append({"ev": "company", "code": code, "status": status, "detail": detail[:300]})
+                    _atomic_write(out_dir / "ledger.json", json.dumps(read_ledger(out_dir), ensure_ascii=False, indent=1))
+                except OSError as exc:  # 账本写不进去时不会再有新请求发出（reserve 会失败），这里只记录
+                    log(f"[{code}] 账本写入失败：{exc}")
 
-    def one(code: str) -> None:
-        if stop.is_set():
-            outcome[code] = "not_started"
-            return
-        log(f"[{code}] 开始（A 组纯模型 → C 组完整流程，约 1–4 分钟）")
+        def one(code: str) -> None:
+            if stop.is_set():
+                outcome[code] = "not_started"
+                return
+            a_done = _load_partial_a(partial / f"{code}.json", code, model)
+            log(f"[{code}] 开始（" + ("A 组已有，复用；" if a_done else "A 组纯模型 → ") + "C 组完整流程，约 1–4 分钟）")
+            try:
+                diag = diag_of(code)
+
+                def save_a(a: dict[str, Any]) -> None:
+                    _atomic_write(partial / f"{code}.json", json.dumps({"code": code, "model": model, "A": a},
+                                                                       ensure_ascii=False, indent=1))
+
+                rec = run_company(diag, llm, model=model, a_done=a_done, on_a=save_a)
+            except InvalidOutput as exc:
+                _atomic_write(failed / f"{code}.json", json.dumps({"code": code, "model": model, "A": exc.a, "reason": str(exc)},
+                                                                  ensure_ascii=False, indent=1))
+                log(f"[{code}] {exc}（不计入评测，已存到 failed/，下次运行会重试 A 组）")
+                finish(code, "a_invalid", str(exc))
+                return
+            except LLMError as exc:
+                if "费用保护" in str(exc):
+                    stop.set()
+                log(f"[{code}] 失败：{exc}")
+                finish(code, "error", str(exc))
+                return
+            except Exception as exc:  # noqa: BLE001 —— 一家公司出错不应拖垮整批
+                log(f"[{code}] 异常：{type(exc).__name__}: {exc}")
+                finish(code, "error", f"{type(exc).__name__}: {exc}")
+                return
+            bad = rec_problem(rec)
+            if bad:
+                kind, why = bad
+                if "费用保护" in why:
+                    stop.set()
+                _atomic_write(failed / f"{code}.json", json.dumps(rec, ensure_ascii=False, indent=1))
+                log(f"[{code}] {why}（不计入评测，已存到 failed/；A 组结果已保留，下次只重跑 C 组）")
+                finish(code, kind, why)
+                return
+            try:
+                _atomic_write(companies / f"{code}.json", json.dumps(rec, ensure_ascii=False, indent=1))
+                # 同时导出 C 组简报：格式与 report 命令的输出相同，可直接用 `finsight samples add` 入库为缓存样例
+                _atomic_write(out_dir / "reports" / f"{code}.json", json.dumps(rec["C"], ensure_ascii=False, indent=1))
+            except OSError as exc:  # 费用已经花了、结果没存下来：明确报错，账本里仍有这笔费用
+                log(f"[{code}] 结果写盘失败：{exc}（费用已计入账本）")
+                finish(code, "error", f"写盘失败：{exc}")
+                return
+            log(f"[{code}] 完成，估算花费 {_rec_cost(rec):.3f} 元；C 组{'经过修订' if rec['C'].get('revised') else '初稿即通过核验'}")
+            finish(code, "done")
+
         try:
-            rec = run_company(diag_of(code), llm, model=model)
-        except LLMError as exc:
-            if "费用保护" in str(exc):
-                stop.set()
-            log(f"[{code}] 失败：{exc}")
-            settle(code, "error", 0.0, str(exc))
-            return
-        except Exception as exc:  # noqa: BLE001 —— 一家公司出错不应拖垮整批
-            log(f"[{code}] 异常：{type(exc).__name__}: {exc}")
-            settle(code, "error", 0.0, f"{type(exc).__name__}: {exc}")
-            return
-        cost = _rec_cost(rec)
-        if rec["C"].get("mode") != "llm":
-            warn = "；".join(rec["C"].get("warnings", []))
-            if "费用保护" in warn:
-                stop.set()
-            _atomic_write(failed / f"{code}.json", json.dumps(rec, ensure_ascii=False, indent=1))
-            log(f"[{code}] 完整流程降级为模板（不计入评测，已存到 failed/）：{warn[:120]}")
-            settle(code, "degraded", cost, warn)
-            return
-        _atomic_write(companies / f"{code}.json", json.dumps(rec, ensure_ascii=False, indent=1))
-        # 同时导出 C 组简报：格式与 report 命令的输出相同，可直接用 `finsight samples add` 入库为缓存样例
-        _atomic_write(out_dir / "reports" / f"{code}.json", json.dumps(rec["C"], ensure_ascii=False, indent=1))
-        log(f"[{code}] 完成，估算花费 {cost:.3f} 元；C 组{'经过修订' if rec['C'].get('revised') else '初稿即通过核验'}")
-        settle(code, "done", cost)
-
-    with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
-        list(pool.map(one, todo))
-    return {"outcome": outcome, "total_cost_cny_est": ledger["total_cost_cny_est"], "stopped_by_budget": stop.is_set()}
+            if skipped:
+                log(f"已有结果，跳过：{', '.join(skipped)}")
+            with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+                list(pool.map(one, todo))
+        finally:
+            remove()
+            if old_budget is None:
+                os.environ.pop("LLM_BUDGET_CNY", None)
+            else:
+                os.environ["LLM_BUDGET_CNY"] = old_budget
+        final = read_ledger(out_dir)
+        try:
+            _atomic_write(out_dir / "ledger.json", json.dumps(final, ensure_ascii=False, indent=1))
+        except OSError as exc:
+            log(f"ledger.json 摘要写入失败：{exc}（ledger.jsonl 仍是完整账本）")
+    return {"outcome": outcome, "total_cost_cny_est": final["total_cost_cny_est"], "stopped_by_budget": stop.is_set(),
+            "unsettled_requests": len(final["unsettled_requests"])}
 
 
 # ------------------------------------------------------------------ 打分（离线，可反复运行）
@@ -173,7 +412,7 @@ def _stats(v) -> dict[str, int]:
 
 
 def group_texts(rec: dict[str, Any], diag: DiagnosisResult) -> dict[str, tuple[str, dict[str, Evidence]]]:
-    """按组取出“文本 + 核验用证据池”。C 组降级为模板（模型失败）时没有 B/C。"""
+    """按组取出“文本 + 核验用证据池”。C 组降级为模板（模型失败）时没有 B/C（无效记录通常已被 rec_problem 排除）。"""
     out = {"A": (rec["A"]["text"], _all_refs(diag))}
     c = rec["C"]
     if c.get("mode") == "llm":
@@ -185,19 +424,20 @@ def group_texts(rec: dict[str, Any], diag: DiagnosisResult) -> dict[str, tuple[s
 
 
 def score_company(rec: dict[str, Any], diag: DiagnosisResult) -> dict[str, Any]:
-    res: dict[str, Any] = {"code": rec["code"], "name": rec["name"], "degraded": rec["C"].get("mode") != "llm"}
+    """给一条**有效**记录（rec_problem 为 None）打分。"""
+    res: dict[str, Any] = {"code": rec["code"], "name": rec["name"]}
     for g, (text, refs) in group_texts(rec, diag).items():
         res[g] = _stats(verify(text, refs))
     res["A"]["cost_cny"] = rec["A"]["usage"].get("cost_cny_est", 0.0)
     res["A"]["elapsed_s"] = rec["A"]["elapsed_ms"] / 1000
-    if not res["degraded"]:
-        res["C"]["cost_cny"] = rec["C"]["usage"].get("cost_cny_est", 0.0)
-        res["C"]["elapsed_s"] = rec["C"]["elapsed_ms"] / 1000
-        res["C"]["revised"] = bool(rec["C"].get("revised"))
+    res["C"]["cost_cny"] = rec["C"]["usage"].get("cost_cny_est", 0.0)
+    res["C"]["elapsed_s"] = rec["C"]["elapsed_ms"] / 1000
+    res["C"]["revised"] = bool(rec["C"].get("revised"))
+    res["C"]["revision_failed"] = any("修订请求失败" in w for w in rec["C"].get("warnings", []))
     return res
 
 
-def summarize(scores: Sequence[dict[str, Any]]) -> dict[str, Any]:
+def summarize(scores: Sequence[dict[str, Any]], excluded: Sequence[dict[str, str]] = ()) -> dict[str, Any]:
     groups: dict[str, Any] = {}
     for g in ("A", "B", "C"):
         rows = [s[g] for s in scores if g in s]
@@ -212,8 +452,9 @@ def summarize(scores: Sequence[dict[str, Any]]) -> dict[str, Any]:
             "mean_cost_cny": round(sum(r.get("cost_cny", 0.0) for r in rows) / len(rows), 3) if rows and g != "B" else None,
             "mean_elapsed_s": round(sum(r.get("elapsed_s", 0.0) for r in rows) / len(rows), 1) if rows and g != "B" else None,
         }
-    return {"groups": groups, "companies": len(scores), "degraded": [s["code"] for s in scores if s["degraded"]],
-            "revised_reports": sum(1 for s in scores if s.get("C", {}).get("revised"))}
+    return {"groups": groups, "companies": len(scores), "excluded": list(excluded),
+            "revised_reports": sum(1 for s in scores if s["C"]["revised"]),
+            "revision_failed_reports": sum(1 for s in scores if s["C"]["revision_failed"])}
 
 
 # ------------------------------------------------------------------ 人工抽检
@@ -355,7 +596,10 @@ def _pct(x: float | None) -> str:
 def to_markdown(summary: dict[str, Any], audit: dict[str, Any] | None, meta: dict[str, Any]) -> str:
     g = summary["groups"]
     lines = [f"# 评测②：数字幻觉对比（{meta.get('model', '?')}，{summary['companies']} 家公司）", "",
-             f"生成时间 {meta.get('generated', '')}。三组使用同一模型、同一公司、同一报告期；B 是 C 的初稿（配对对比）。", "",
+             f"生成时间 {meta.get('generated', '')}。三组使用同一模型、同一公司、同一报告期；B 是 C 的初稿（配对对比）。"
+             "**提示词不同**：A 组只有一段简短的任务说明（不给证据、不要求引用，原文见 `ablation.json` 的 meta.prompts）；"
+             "B/C 使用 FinSight 的系统提示、证据清单和写作规则。所以 A 与 B/C 的差别是“有证据 + 有规则”的整体效果，"
+             "不能全部归因于证据本身；B 与 C 的差别才只来自核验器。", "",
              "## 核验器口径（自动，非真值）", "",
              "| 组 | 简报数 | 数字总数 | 问题数字 | 问题数字率 | 含问题数字的简报 | 平均成本(元) | 平均耗时(秒) |", "|---|---|---|---|---|---|---|---|"]
     for k in ("A", "B", "C"):
@@ -363,8 +607,10 @@ def to_markdown(summary: dict[str, Any], audit: dict[str, Any] | None, meta: dic
         lines.append(f"| {r['label']} | {r['reports']} | {r['numbers']} | {r['problems']} | {_pct(r['problem_rate'])} | "
                      f"{r['reports_with_problem']} / {r['reports']} | {r['mean_cost_cny'] if r['mean_cost_cny'] is not None else '—'} | "
                      f"{r['mean_elapsed_s'] if r['mean_elapsed_s'] is not None else '—'} |")
+    excl = "；".join(f"{e['code']}（{e['reason']}）" for e in summary["excluded"]) or "无"
     lines += ["", f"被核验器打回修订的简报：{summary['revised_reports']} / {summary['companies']}；"
-              f"降级为模板（模型失败，不计入 B/C）：{', '.join(summary['degraded']) or '无'}。", "",
+              f"修订请求失败而保留初稿：{summary['revision_failed_reports']}；"
+              f"无效、未纳入统计的公司：{excl}。", "",
               "说明：A 组没有引用，“问题数字”指在该公司全部证据里找不到可信归属的数字，可能是编造，也可能是证据库之外的真实数字；"
               "B/C 组指不一致 / 引用无效 / 无证据。核验器统计自己的输出会有循环论证，因此下面用人工抽检校验。", ""]
     if audit is None:
@@ -387,7 +633,8 @@ def to_markdown(summary: dict[str, Any], audit: dict[str, Any] | None, meta: dic
               "* 核验器只比较数值：A 组里“有归属”的数字只表示它与证据库中某个数值相近，不保证指标对得上"
               "（例如虚构的 12.34% 恰好与某个无关的增速一致），所以 A 组的问题数字率是下限，真实错误率以人工抽检为准。",
               "* 人工抽检对照的是系统找出的最接近证据，仍须以原始财报为准；无法确认的判“不确定”。",
-              "* 同一模型、同一提示词；换模型或提示词结果会不同。", ""]
+              "* A 与 B/C 的提示词、证据和规则都不同（见上），这是实验设计的一部分；换模型或提示词结果会不同。",
+              "* A 为空或被截断、C 降级为模板或被截断的公司不计入统计，并在上面列出。", ""]
     return "\n".join(lines)
 
 
@@ -400,12 +647,19 @@ def score_dir(out_dir: Path, diag_of: Callable[[str], DiagnosisResult], *, audit
     """从已保存的原始记录重新打分并写出报告 / 抽检表。不调用大模型，可反复运行。
 
     make_audit=False 用于“还没跑完”的中途打分：抽检表一经生成就固定，不能在数据不全时生成。"""
-    records = load_records(out_dir)
+    loaded = load_records(out_dir)
+    records, excluded = [], []
+    for r in loaded:
+        bad = rec_problem(r)
+        if bad:
+            excluded.append({"code": r["code"], "reason": bad[1]})
+        else:
+            records.append(r)
     if not records:
-        raise SampleError(f"{out_dir / 'companies'} 里没有原始记录")
+        raise SampleError(f"{out_dir / 'companies'} 里没有可用的有效记录")
     diags = {r["code"]: diag_of(r["code"]) for r in records}
     scores = [score_company(r, diags[r["code"]]) for r in records]
-    summary = summarize(scores)
+    summary = summarize(scores, excluded)
     keyfile = out_dir / "audit_key.json"
     audit = None
     if audit_file is not None:
@@ -415,7 +669,12 @@ def score_dir(out_dir: Path, diag_of: Callable[[str], DiagnosisResult], *, audit
     elif make_audit and not keyfile.exists():  # 抽检表只生成一次：重复打分不能换样本，否则已填的判定对不上
         rows, key = build_audit(records, diags, per_group=per_group)
         write_audit(rows, key, out_dir)
-    meta = {"model": records[0].get("model"), "generated": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")}
+    from finsight.reporting.report import SYSTEM_PROMPT
+
+    meta = {"model": records[0].get("model"), "generated": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+            "prompts": {"A_system": PURE_SYSTEM, "A_user_example": pure_prompt("（公司名）", "（代码）", "（年份）"),
+                        "C_system_sha256": hashlib.sha256(SYSTEM_PROMPT.encode("utf-8")).hexdigest()[:16],
+                        "note": "B/C 的系统提示、证据清单与规则见 reporting/report.py；A 与 B/C 的提示词不同，是实验干预的一部分"}}
     (out_dir / "ablation.json").write_text(json.dumps({"meta": meta, "summary": summary, "per_company": scores,
                                                        "audit": audit}, ensure_ascii=False, indent=1), encoding="utf-8")
     (out_dir / "ablation_report.md").write_text(to_markdown(summary, audit, meta), encoding="utf-8")
