@@ -53,6 +53,9 @@ class Report(BaseModel):
     # 大模型初稿（尚未经过核验器打回修订）的核验统计；只有 LLM 简报才有。评测② B 组（有证据、无核验）就是它。
     draft_check: dict[str, int] | None = None
     draft_markdown: str | None = None  # 初稿正文；只在被修订过时保存（未修订则与终稿正文相同）
+    # 初稿本身是否被长度上限截断。`truncated` 只描述最终采用的正文：初稿被截断、随后采用了完整的修订稿时，
+    # `truncated` 为 False，但初稿仍是不完整的——评测② 把初稿当 B 组，必须单独记录这一点。
+    draft_truncated: bool = False
 
 
 # ------------------------------------------------------------------ 上下文
@@ -258,7 +261,7 @@ def generate_report(result: DiagnosisResult, *, llm: LLMClient | None = None, mo
             text = resp.content.strip()
             if not text:
                 raise LLMError("模型返回了空报告")
-            truncated = bool(resp.truncated)
+            truncated = draft_truncated = bool(resp.truncated)
             v = verify(text, ctx.refs)
             emit(progress, "verifying", _verify_note(v))
             draft_text, draft_v = text, v
@@ -293,6 +296,7 @@ def generate_report(result: DiagnosisResult, *, llm: LLMClient | None = None, mo
                           model=getattr(llm, "model", None), markdown=text + note,
                           annotated_markdown=annotate(text, v) + note, data_asof=data_asof(result),
                           draft_check=_draft_check(draft_v), draft_markdown=draft_text if revised else None, truncated=truncated,
+                          draft_truncated=draft_truncated,
                           refs=refs_public, verification=v, attempts=attempts, revised=revised,
                           usage=meter.as_dict(), warnings=warnings, generated_at=now,
                           elapsed_ms=int((time.monotonic() - started) * 1000))

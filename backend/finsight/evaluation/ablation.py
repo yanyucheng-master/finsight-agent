@@ -115,6 +115,8 @@ def rec_problem(rec: dict[str, Any]) -> tuple[str, str] | None:
         return "degraded", "完整流程降级为模板：" + "；".join(c.get("warnings", []))[:150]
     if c.get("truncated"):  # 最终采用的正文来自被截断的回复（被截断的修订稿不会被采用）
         return "c_truncated", "C 组输出达到长度上限被截断，内容可能不完整"
+    if c.get("revised") and c.get("draft_truncated"):  # 终稿完整，但 B 组取的初稿被截断：B 少写的内容会让 B 显得问题更少
+        return "b_truncated", "B 组初稿达到长度上限被截断（终稿是完整的修订稿），B、C 配对比较不成立"
     return None
 
 
@@ -162,6 +164,17 @@ def _rec_cost(rec: dict[str, Any]) -> float:
     return round(float(rec["A"]["usage"].get("cost_cny_est", 0.0)) + float(rec["C"].get("usage", {}).get("cost_cny_est", 0.0)), 6)
 
 
+def _write_all(fd: int, data: bytes) -> None:
+    """os.write 不保证一次写完（磁盘将满、某些文件系统 / 管道都可能只写一部分且不报错），循环直到全部写入。
+    返回 0 字节说明没有进展，按写盘失败处理，避免死循环。"""
+    view = memoryview(data)
+    while view:
+        n = os.write(fd, view)
+        if n <= 0:
+            raise OSError(f"写入账本没有进展（已写 {len(data) - len(view)}/{len(data)} 字节）")
+        view = view[n:]
+
+
 # ---- 费用账本：追加写的 ledger.jsonl（每行 fsync），请求发出之前先落盘，结算后再追加一行
 
 class Journal:
@@ -205,13 +218,24 @@ class Journal:
             os.fsync(f.fileno())
 
     def append(self, rec: dict[str, Any]) -> None:
+        """追加一行并 fsync；只有整行都写进去并落盘才算成功（调用方据此决定能不能发请求）。
+        os.write 可以只写入一部分字节而不报错，所以必须检查返回值、写满为止；写不满或中途出错时，
+        把文件截回写入之前的长度（尽力而为，来不及截的残片由下次 _repair_tail 清走），然后抛 OSError。"""
         line = (json.dumps({**rec, "at": _now()}, ensure_ascii=False) + "\n").encode("utf-8")
         with self._lock:
             self._repair_tail()
             fd = os.open(self.path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, "O_BINARY", 0), 0o644)  # Windows：二进制模式，不改换行
             try:
-                os.write(fd, line)
-                os.fsync(fd)
+                start = os.fstat(fd).st_size
+                try:
+                    _write_all(fd, line)
+                    os.fsync(fd)
+                except BaseException:
+                    try:
+                        os.ftruncate(fd, start)
+                    except OSError:
+                        pass
+                    raise
             finally:
                 os.close(fd)
 

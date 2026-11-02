@@ -575,3 +575,122 @@ def test_truncated_revision_is_not_adopted_and_is_flagged(diag, tmp_path):
     assert any("修订稿" in w for w in c["warnings"])
     r = ablation.score_dir(out, diag_of_factory(diag), make_audit=False)
     assert r["summary"]["revision_failed_reports"] == 1 and r["per_company"][0]["B"]["problems"] == 1
+
+
+# ------------------------------------------------------------------ 第三轮复核指出的两处边界问题
+
+def _ledger_lines(path):
+    return [json.loads(x) for x in path.read_text(encoding="utf-8").splitlines()]
+
+
+def test_short_writes_are_completed_not_ignored(tmp_path, monkeypatch):
+    """os.write 只写入一部分字节、不报错：append 必须写满，账本不能留下半条记录。"""
+    real, short_calls = os.write, []
+
+    def short(fd, data):
+        raw = bytes(data)
+        if b'"ev"' in raw:  # 只影响账本行
+            short_calls.append(len(raw))
+            return real(fd, raw[: max(1, len(raw) // 2)])
+        return real(fd, data)
+
+    monkeypatch.setattr(ablation.os, "write", short)
+    p = tmp_path / "ab" / "ledger.jsonl"
+    j = ablation.Journal(p)
+    j.append({"ev": "reserve", "id": "a", "reserved": 0.3, "code": "600519", "stage": "A"})
+    j.append({"ev": "settle", "id": "a", "charged": 0.05, "exact": True})
+    j.append({"ev": "reserve", "id": "b", "reserved": 0.2})
+    assert short_calls, "测试没有触发短写"
+    assert [r["ev"] for r in _ledger_lines(p)] == ["reserve", "settle", "reserve"]  # 三条都完整、可解析
+    assert p.read_bytes().endswith(b"\n") and not (p.parent / "ledger.torn").exists()
+    led = ablation.read_ledger(p.parent)
+    assert not led["corrupt"] and led["requests"] == 2
+    assert led["total_cost_cny_est"] == pytest.approx(0.05 + 0.2)  # a 按实际，b 未结算按上界
+
+
+def test_write_failure_midway_raises_and_leaves_no_fragment(tmp_path, monkeypatch):
+    p = tmp_path / "ab" / "ledger.jsonl"
+    j = ablation.Journal(p)
+    j.append({"ev": "reserve", "id": "a", "reserved": 0.3})
+    before = p.read_bytes()
+    real, state = os.write, {"half_done": False}
+
+    def half_then_fail(fd, data):
+        raw = bytes(data)
+        if state["half_done"]:
+            raise OSError("disk full")  # 补写剩余部分时失败
+        if b'"ev"' not in raw:
+            return real(fd, data)
+        state["half_done"] = True
+        return real(fd, raw[: len(raw) // 2])  # 先写了一半
+
+    monkeypatch.setattr(ablation.os, "write", half_then_fail)
+    with pytest.raises(OSError):
+        j.append({"ev": "reserve", "id": "b", "reserved": 0.2})
+    monkeypatch.undo()
+    assert p.read_bytes() == before  # 残片已截回，没有半条记录留在账本里
+    j.append({"ev": "reserve", "id": "c", "reserved": 0.1})  # 之后仍可正常追加
+    led = ablation.read_ledger(p.parent)
+    assert not led["corrupt"] and led["requests"] == 2 and led["total_cost_cny_est"] == pytest.approx(0.4)
+
+
+def test_write_without_progress_raises_instead_of_looping(tmp_path, monkeypatch):
+    p = tmp_path / "ab" / "ledger.jsonl"
+    j = ablation.Journal(p)
+    real = os.write
+    monkeypatch.setattr(ablation.os, "write", lambda fd, data: 0 if b'"ev"' in bytes(data) else real(fd, data))
+    with pytest.raises(OSError, match="没有进展"):
+        j.append({"ev": "reserve", "id": "a", "reserved": 0.3})
+    assert not p.exists() or p.read_bytes() == b""
+
+
+def test_run_all_with_short_ledger_writes_keeps_ledger_equal_to_memory(diag, tmp_path, guard, monkeypatch):
+    """端到端：每次账本写入都只写一半。运行照常完成，账本完整、与进程内累计一致，没有被恢复逻辑清掉的预留。"""
+    real = os.write
+
+    def short(fd, data):
+        raw = bytes(data)
+        return real(fd, raw[: max(1, len(raw) // 2)]) if b'"ev"' in raw else real(fd, data)
+
+    monkeypatch.setattr(ablation.os, "write", short)
+    out = tmp_path / "ab"
+    res = _run(diag, _real_client(lambda r: _chat_ok(A_TEXT) if _is_a(r) else _chat_ok(_drafts(diag)[1])), out)
+    assert res["outcome"] == {"600519": "done"}
+    led = ablation.read_ledger(out)
+    assert not led["corrupt"] and led["requests"] == 2 and not led["unsettled_requests"]
+    assert not (out / "ledger.torn").exists()
+    assert led["total_cost_cny_est"] == pytest.approx(guard.spent) and led["total_cost_cny_est"] > 0
+
+
+def test_truncated_draft_with_complete_revision_is_excluded_from_pairing(diag, tmp_path):
+    """初稿被截断、修订稿完整：C 组完整，但 B（初稿）不完整 → 配对不成立，不计入统计，下次只重跑 C。"""
+    draft, fixed = _drafts(diag)
+    out = tmp_path / "ab"
+    llm = MockLLM(script=[A_TEXT, LLMResponse(content=draft, finish_reason="length"), fixed])
+    res = _run(diag, llm, out)
+    assert res["outcome"] == {"600519": "b_truncated"}
+    assert not (out / "companies" / "600519.json").exists() and (out / "failed" / "600519.json").exists()
+    rec = json.loads((out / "failed" / "600519.json").read_text(encoding="utf-8"))
+    assert rec["C"]["revised"] and not rec["C"]["truncated"] and rec["C"]["draft_truncated"]  # 终稿完整，初稿被截断
+    kind, why = ablation.rec_problem(rec)
+    assert kind == "b_truncated" and "B 组初稿" in why
+    assert (out / "partial" / "600519.json").exists()  # A 组保留
+
+    again = MockLLM(script=[draft, fixed])  # 重试：A 不再发送，只重跑 C
+    assert _run(diag, again, out)["outcome"] == {"600519": "done"}
+    assert len(again.requests) == 2 and "【证据清单】" in again.requests[0]["messages"][1]["content"]
+
+
+def test_score_dir_excludes_record_with_truncated_draft(diag, tmp_path):
+    draft, fixed = _drafts(diag)
+    out = tmp_path / "ab"
+    _run(diag, MockLLM(script=[A_TEXT, draft, fixed]), out)
+    path = out / "companies" / "600519.json"
+    rec = json.loads(path.read_text(encoding="utf-8"))
+    assert rec["C"]["revised"] and rec["C"]["draft_truncated"] is False
+    rec["C"]["draft_truncated"] = True  # 手工改成“初稿被截断”
+    other = dict(rec, code="000858", name="五粮液")
+    (out / "companies" / "000858.json").write_text(json.dumps(other, ensure_ascii=False), encoding="utf-8")
+    r = ablation.score_dir(out, diag_of_factory(diag), make_audit=False)
+    assert r["summary"]["companies"] == 1 and [e["code"] for e in r["summary"]["excluded"]] == ["000858"]
+    assert "初稿" in r["summary"]["excluded"][0]["reason"]
