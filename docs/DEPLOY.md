@@ -5,6 +5,10 @@
 
 ## 1. 部署前提（必须满足）
 
+实际公网地址：https://finsight-agent-20np.onrender.com 。本轮已核对接口与静态资源；页面操作验收与手机流量加载仍未完成，详见 `RELEASE-20261103.md`。
+
+当前部署值：`FINSIGHT_LIVE_DAILY_LIMIT=3`、`FINSIGHT_LIVE_PER_IP_DAILY=1`、`FINSIGHT_MAX_CONCURRENT_JOBS=1`、`LLM_BUDGET_CNY=1`；下文表格为未来明确启用实时模型时的可选建议，当前没有模型 Key。限额 `0` 代表不限额，不能用它关闭付费功能。
+
 | 项目 | 要求 | 原因 |
 |---|---|---|
 | 进程数 | **单进程、单实例**（不要开多个 worker，也不要横向扩容） | 生成任务表在进程内存里；多进程时轮询会找不到任务 |

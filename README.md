@@ -62,6 +62,7 @@ python -m pytest                                    # 全部离线测试（不�
 
 ## 在线演示与打包
 
+- 公网演示：[FinSight 投研工作台](https://finsight-agent-20np.onrender.com)。当前使用真实缓存样例与确定性分析，未配置模型 Key；免费服务可能休眠，首次访问需等待。发布及验证范围见 [`docs/RELEASE-20261103.md`](docs/RELEASE-20261103.md)。
 - 在线体验链接的部署步骤、环境变量和费用控制：[`docs/DEPLOY.md`](docs/DEPLOY.md)。
 - 生成参赛用的“关键代码”压缩包：双击 `scripts\package_code.bat`（或 `python scripts/package_code.py`），输出到 `dist/`。脚本会排除 `.env`、`.venv`、`node_modules` 等本机文件，**发现任何 API Key 就中止**，并在包内附每个文件的 SHA-256 清单。
 
