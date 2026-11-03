@@ -847,7 +847,7 @@ def _pct(x: float | None) -> str:
 def to_markdown(summary: dict[str, Any], audit: dict[str, Any] | None, meta: dict[str, Any]) -> str:
     g = summary["groups"]
     ai_audit = meta.get("audit_kind") == "ai-assisted"
-    lines = [f"# 评测②：数字幻觉对比（{meta.get('model', '?')}，{summary['companies']} 家公司）", "",
+    lines = [f"# 评测②：数字证据匹配与财报抽检（{meta.get('model', '?')}，{summary['companies']} 家公司）", "",
              f"生成时间 {meta.get('generated', '')}。三组使用同一模型、同一公司、同一报告期；B 是 C 的初稿（配对对比）。"
              "**提示词不同**：A 组只有一段简短的任务说明（不给证据、不要求引用，原文见 `ablation.json` 的 meta.prompts）；"
              "B/C 使用 FinSight 的系统提示、证据清单和写作规则。所以 A 与 B/C 的差别是“有证据 + 有规则”的整体效果，"
@@ -908,7 +908,9 @@ def to_markdown(summary: dict[str, Any], audit: dict[str, Any] | None, meta: dic
                   "不能把此抽检判错率当成全部数字的总体错误率，也不支持组间显著性结论。", "",
                   f"核验器对照{comparison}（标出“问题数字” = 阳性；复核判“错” = 参照阳性）：",
                   f"真阳性 {v['tp']}，假阳性 {v['fp']}，假阴性 {v['fn']}，真阴性 {v['tn']}；"
-                  f"查准率 {_pct(v['precision'])}，查全率 {_pct(v['recall'])}。", ""]
+                  + (f"参考查准率 {_pct(v['precision'])}。本次仅发现 {v['tp'] + v['fn']} 个错误样本，"
+                     "不足以评价一般场景的查全能力。" if ai_audit else
+                     f"查准率 {_pct(v['precision'])}，查全率 {_pct(v['recall'])}。"), ""]
     lines += ["## 局限", "", "* 样本很小（单次生成、少数公司），只能说明这批样本上的观察，不是统计显著的普遍规律。",
               "* 核验器只比较数值：A 组里“有归属”的数字只表示它与证据库中某个数值相近，不保证指标对得上"
               "（例如虚构的 12.34% 恰好与某个无关的增速一致）；无归属也可能只是证据库缺漏，因此问题数字率不是实际错误率的上下界，"
