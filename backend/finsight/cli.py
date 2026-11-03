@@ -239,7 +239,8 @@ def _eval_ablation(args: argparse.Namespace) -> int:
 
     if args.which == "ablation-score":
         out = Path(args.target) if args.target else root / "docs" / "eval" / f"ablation-{provider}"
-        res = ablation.score_dir(out, diag_of, audit_file=Path(args.audit) if args.audit else None, per_group=args.per_group)
+        res = ablation.score_dir(out, diag_of, audit_file=Path(args.audit) if args.audit else None, per_group=args.per_group,
+                                 regen_audit=args.regen_audit)
         print((out / "ablation_report.md").read_text(encoding="utf-8"))
         print(f"已写入 {out / 'ablation_report.md'}" + ("" if args.audit else f"；抽检表 {out / 'audit_sheet.csv'}"))
         return 0 if res else 1
@@ -251,17 +252,63 @@ def _eval_ablation(args: argparse.Namespace) -> int:
     codes = args.codes or ablation.DEFAULT_CODES
     os.environ.setdefault("LLM_MAX_TOKENS", "8192")  # 与 scripts/llm_smoke.py 一致：让逐请求的费用预留更贴近实际
     cfg = llm_settings(provider)
-    if not cfg.enabled:
+    if args.max_tokens > 0:
+        import dataclasses
+
+        cfg = dataclasses.replace(cfg, max_tokens=args.max_tokens)
+    if args.require_model and getattr(cfg, "model", "") != args.require_model:
+        print(f"模型不符：要求 {args.require_model}，实际配置 {getattr(cfg, 'model', '?')}（{provider}）。没有发送任何请求。")
+        return 1
+    if not cfg.enabled and not args.dry_run:
         print(f"未配置 {provider} 的 API Key（请先运行 scripts\\setup_env.bat）")
         return 1
-    spent = ablation.read_ledger(out)["total_cost_cny_est"]
+    led0 = ablation.read_ledger(out)
+    spent = led0["total_cost_cny_est"]
+    if led0["corrupt"]:
+        print(f"{out / 'ledger.jsonl'} 有读不懂的行，账本可能损坏，已拒绝继续（不会修改它）。没有发送任何请求。")
+        return 1
     try:
+        if not cfg.enabled:  # 只可能是 dry-run：用占位符构造客户端，仅为按真实提示词计算占用上界，不会发送任何请求
+            import dataclasses
+
+            cfg = dataclasses.replace(cfg, api_key="dry-run")
         llm = make_client(cfg)
+        if hasattr(llm, "retries"):
+            llm.retries = max(0, args.retries)  # 每次重试都会单独占用并记账
     except LLMError as exc:
         print("大模型不可用：", exc)
         return 1
-    print(f"评测②：{cfg.provider} / {cfg.model}，公司 {len(codes)} 家，预算 {args.budget or '不限'} 元（此前已记账约 {spent:.2f} 元），输出 {out}")
-    print("提醒：预算上限只约束这个输出目录；总授权额度（含此前各次测试）请对照服务商控制台的已用金额。")
+    cap = args.budget or 0.0
+    print(f"评测②：{cfg.provider} / {cfg.model}，公司 {len(codes)} 家，单次输出上限 {getattr(cfg, 'max_tokens', '?')}，"
+          f"推理强度 {getattr(cfg, 'reasoning_effort', '?')}，并发 {args.workers}，失败重试 {args.retries} 次，输出 {out}")
+    print(f"费用：本目录累计上限 {cap or '不限'} 元，账本已记账约 {spent:.3f} 元（未结算 {len(led0['unsettled_requests'])} 笔，按占用上界计），"
+          f"本次最多再花约 {max(cap - spent, 0):.3f} 元（估算）。")
+    print("提醒：这个上限只约束本输出目录的账本（请勿删除该目录或 ledger.jsonl）；总授权额度（含此前各次测试）请对照服务商控制台。")
+    bounds = []
+    if hasattr(llm, "build_payload"):
+        for code in codes:
+            try:
+                b = ablation.reserve_bounds(diag_of(code), llm)
+            except Exception as exc:  # noqa: BLE001
+                print(f"  {code}：无法估算（{type(exc).__name__}: {exc}）")
+                return 1
+            bounds.append(b)
+            print(f"  {code}：单次占用参考估计  A {b['A']:.3f} / C {b['C']:.3f} / 修订 ≈{b['C_revision']:.3f} 元")
+        worst = max(max(b.values()) for b in bounds)
+        print(f"  参考：任一时刻在途请求的占用约 {worst * max(args.workers, 1):.3f} 元。以上是参考估计，**不是数学上界**："
+              "修订请求的输入含初稿和 reasoning_content、修订提示长度、多轮对话都按固定假设估算，真实长度可能更大；"
+              "真实发送前的预留仍按当次实际请求内容逐次计算，剩余额度不足以占用时保护会拒绝发送。")
+    if args.dry_run:
+        print("dry-run：没有发送任何请求，也没有写入账本。")
+        return 0
+    if args.ask:
+        try:
+            answer = input("确认开始真实请求（会产生费用）？请输入 YES 后回车，其他任何输入都会取消：").strip()
+        except EOFError:
+            answer = ""
+        if answer != "YES":
+            print("已取消，没有发送任何请求。")
+            return 1
     try:
         res = ablation.run_all(codes, diag_of, llm, out, model=cfg.model, workers=args.workers, budget=args.budget)
     except ablation.BudgetExhausted as exc:
@@ -272,8 +319,13 @@ def _eval_ablation(args: argparse.Namespace) -> int:
         return 1
     done = [c for c in codes if (out / "companies" / f"{c}.json").exists()]
     print(f"\n完成 {len(done)} / {len(codes)} 家；本目录累计估算花费 {res['total_cost_cny_est']:.2f} 元（客户端估算，以服务商控制台为准）")
+    rows = ablation.company_overview(codes, out)
+    overview = ablation.overview_markdown(rows, total=res["total_cost_cny_est"], budget=cap, model=cfg.model,
+                                          unsettled=res["unsettled_requests"])
+    (out / "run_overview.md").write_text(overview, encoding="utf-8")
+    print(overview)
     if res["stopped_by_budget"]:
-        print("已触发费用保护，剩余公司未运行。可提高 --budget 后重新运行（已完成的会跳过）。")
+        print("已触发费用保护，剩余公司未运行。额度取决于你的授权与服务商控制台的实际已用金额，请先核对，不要为了跑完而随意提高 --budget。")
     if not done:
         return 1
     complete = len(done) == len(codes)
@@ -283,7 +335,8 @@ def _eval_ablation(args: argparse.Namespace) -> int:
         print(f"抽检表：{out / 'audit_sheet.csv'}（用 Excel 打开，只填“判定”和“备注”两列）")
     else:
         missing = [c for c in codes if c not in done]
-        print(f"未完成：{', '.join(missing)}。重新运行同一命令会只补跑这些（已完成的 A 组结果会复用）；全部完成后才会生成抽检表。")
+        print(f"未完成：{', '.join(missing)}。重新运行同一命令只会在剩余额度内补跑这些（已完成的 A 组结果会复用，额度不会因重跑而增加）；"
+              f"全部完成后才自动生成抽检表。若不再补跑，可对已完成的公司运行 `finsight eval ablation-score {out}` 生成报告和抽检表（只覆盖已完成的公司）。")
     return 0 if complete else 2
 
 
@@ -405,10 +458,18 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--out", default="")
     p.add_argument("--provider", choices=["deepseek", "kimi", "intern"], default=None)
     p.add_argument("--codes", nargs="*", default=None, help="ablation：公司代码（默认 9 家样本）")
-    p.add_argument("--budget", type=float, default=9.0, help="ablation：本目录累计费用上限（元，客户端估算），0 表示不限")
+    p.add_argument("--budget", type=float, default=5.0,
+                   help="ablation：本目录**累计**费用上限（元，客户端估算，含此前各次运行；重跑不会增加额度），0 表示不限")
     p.add_argument("--workers", type=int, default=2, help="ablation：并发公司数")
+    p.add_argument("--require-model", default="", help="ablation：模型名必须等于它，否则一个请求都不发（例如 kimi-k3.1-pro）")
+    p.add_argument("--max-tokens", type=int, default=0, help="ablation：强制单次输出上限（覆盖 .env 的 LLM_MAX_TOKENS；0 = 沿用默认 8192）")
+    p.add_argument("--retries", type=int, default=3, help="ablation：每个请求失败后的最多重试次数（每次发送都单独占用并记账）")
+    p.add_argument("--dry-run", action="store_true", help="ablation：只核对参数、账本与各公司的费用占用上界，不发送任何请求")
+    p.add_argument("--ask", action="store_true", help="ablation：打印运行计划后，必须手动输入 YES 才开始发送请求")
     p.add_argument("--audit", default="", help="ablation-score：填好的人工抽检表（csv）")
-    p.add_argument("--per-group", type=int, default=15, help="人工抽检每组抽取的数字个数")
+    p.add_argument("--per-group", type=int, default=20, help="人工抽检：A 组、B/C 共有数字各抽取的个数")
+    p.add_argument("--regen-audit", action="store_true",
+                   help="ablation-score：用新口径重新生成抽检表（旧表、旧报告留档为 *.vN.*）；旧表已有人工判定时拒绝")
     p.set_defaults(func=cmd_eval)
     p = sub.add_parser("samples", help="缓存样例：入库（重新核验）/ 列出")
     p.add_argument("action", choices=["add", "list"])

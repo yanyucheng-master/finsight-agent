@@ -1,0 +1,499 @@
+{
+ "meta": {
+  "model": "kimi-k3.1-pro",
+  "generated": "2026-11-03 07:43 UTC",
+  "prompts": {
+   "A_system": "你是一名严谨的证券研究分析师，为专业投研人员撰写上市公司财务风险研究简报。",
+   "A_user_example": "请撰写一份关于（公司名）（（代码））（年份）年年报（报告期截至（年份）年12月31日）的财务状况与风险研究简报，需要给出具体的关键财务数据和风险判断。\n输出 Markdown，固定使用以下五个二级标题：\n## 核心结论\n## 主要风险\n## 积极因素\n## 建议进一步核实的事项\n## 数据与方法说明",
+   "C_system_sha256": "55ccdfcd7889f7fc",
+   "note": "B/C 的系统提示、证据清单与规则见 reporting/report.py；A 与 B/C 的提示词不同，是实验干预的一部分"
+  },
+  "scoring_version": 2,
+  "regen_note": "",
+  "ledger": {
+   "total_cost_cny_est": 5.164187,
+   "requests": 19,
+   "by_code": {
+    "600519": 0.638769,
+    "000858": 0.481788,
+    "000568": 0.530814,
+    "000651": 0.52399,
+    "300750": 0.468915,
+    "000002": 0.505292,
+    "600518": 0.51562,
+    "002450": 0.475324,
+    "002069": 1.023677
+   }
+  }
+ },
+ "summary": {
+  "groups": {
+   "A": {
+    "label": "A 纯大模型（无证据、无核验）",
+    "reports": 9,
+    "numbers": 150,
+    "numbers_per_report": 16.7,
+    "problems": 107,
+    "problem_rate": 0.7133333333333334,
+    "reports_with_problem": 8,
+    "reports_with_flags": 1,
+    "mean_cost_cny": 0.194,
+    "mean_elapsed_s": 107.0
+   },
+   "B": {
+    "label": "B 有证据、无核验（核验前的初稿）",
+    "reports": 9,
+    "numbers": 326,
+    "numbers_per_report": 36.2,
+    "problems": 0,
+    "problem_rate": 0.0,
+    "reports_with_problem": 0,
+    "reports_with_flags": 0,
+    "mean_cost_cny": null,
+    "mean_elapsed_s": null
+   },
+   "C": {
+    "label": "C 完整 FinSight（证据 + 核验器修订）",
+    "reports": 9,
+    "numbers": 326,
+    "numbers_per_report": 36.2,
+    "problems": 0,
+    "problem_rate": 0.0,
+    "reports_with_problem": 0,
+    "reports_with_flags": 0,
+    "mean_cost_cny": 0.317,
+    "mean_elapsed_s": 75.8
+   }
+  },
+  "companies": 9,
+  "excluded": [],
+  "a_period": {
+   "current": 0,
+   "prior_stated": 13,
+   "prior_conflict": 2,
+   "prior_unstated": 28
+  },
+  "a_no_figures": [
+   "002069"
+  ],
+  "revised_reports": 0,
+  "revision_failed_reports": 0
+ },
+ "per_company": [
+  {
+   "code": "000002",
+   "name": "万科A",
+   "A": {
+    "total": 18,
+    "supported": 4,
+    "problems": 14,
+    "mismatch": 0,
+    "invalid_ref": 0,
+    "unverified": 14,
+    "benchmark": 1,
+    "flags": 0,
+    "period": {
+     "current": 0,
+     "prior_stated": 1,
+     "prior_conflict": 0,
+     "prior_unstated": 3
+    },
+    "cost_cny": 0.187686,
+    "elapsed_s": 105.257
+   },
+   "B": {
+    "total": 26,
+    "supported": 26,
+    "problems": 0,
+    "mismatch": 0,
+    "invalid_ref": 0,
+    "unverified": 0,
+    "benchmark": 0,
+    "flags": 0
+   },
+   "C": {
+    "total": 26,
+    "supported": 26,
+    "problems": 0,
+    "mismatch": 0,
+    "invalid_ref": 0,
+    "unverified": 0,
+    "benchmark": 0,
+    "flags": 0,
+    "cost_cny": 0.317606,
+    "elapsed_s": 78.088,
+    "revised": false,
+    "revision_failed": false
+   }
+  },
+  {
+   "code": "000568",
+   "name": "泸州老窖",
+   "A": {
+    "total": 23,
+    "supported": 9,
+    "problems": 14,
+    "mismatch": 0,
+    "invalid_ref": 0,
+    "unverified": 14,
+    "benchmark": 1,
+    "flags": 0,
+    "period": {
+     "current": 0,
+     "prior_stated": 3,
+     "prior_conflict": 0,
+     "prior_unstated": 6
+    },
+    "cost_cny": 0.228473,
+    "elapsed_s": 122.922
+   },
+   "B": {
+    "total": 44,
+    "supported": 44,
+    "problems": 0,
+    "mismatch": 0,
+    "invalid_ref": 0,
+    "unverified": 0,
+    "benchmark": 0,
+    "flags": 0
+   },
+   "C": {
+    "total": 44,
+    "supported": 44,
+    "problems": 0,
+    "mismatch": 0,
+    "invalid_ref": 0,
+    "unverified": 0,
+    "benchmark": 0,
+    "flags": 0,
+    "cost_cny": 0.302341,
+    "elapsed_s": 69.077,
+    "revised": false,
+    "revision_failed": false
+   }
+  },
+  {
+   "code": "000651",
+   "name": "格力电器",
+   "A": {
+    "total": 23,
+    "supported": 9,
+    "problems": 14,
+    "mismatch": 0,
+    "invalid_ref": 0,
+    "unverified": 14,
+    "benchmark": 1,
+    "flags": 0,
+    "period": {
+     "current": 0,
+     "prior_stated": 1,
+     "prior_conflict": 0,
+     "prior_unstated": 8
+    },
+    "cost_cny": 0.200593,
+    "elapsed_s": 111.705
+   },
+   "B": {
+    "total": 30,
+    "supported": 30,
+    "problems": 0,
+    "mismatch": 0,
+    "invalid_ref": 0,
+    "unverified": 0,
+    "benchmark": 0,
+    "flags": 0
+   },
+   "C": {
+    "total": 30,
+    "supported": 30,
+    "problems": 0,
+    "mismatch": 0,
+    "invalid_ref": 0,
+    "unverified": 0,
+    "benchmark": 0,
+    "flags": 0,
+    "cost_cny": 0.323397,
+    "elapsed_s": 83.495,
+    "revised": false,
+    "revision_failed": false
+   }
+  },
+  {
+   "code": "000858",
+   "name": "五粮液",
+   "A": {
+    "total": 17,
+    "supported": 4,
+    "problems": 13,
+    "mismatch": 0,
+    "invalid_ref": 0,
+    "unverified": 13,
+    "benchmark": 1,
+    "flags": 0,
+    "period": {
+     "current": 0,
+     "prior_stated": 2,
+     "prior_conflict": 0,
+     "prior_unstated": 2
+    },
+    "cost_cny": 0.164077,
+    "elapsed_s": 90.91
+   },
+   "B": {
+    "total": 34,
+    "supported": 34,
+    "problems": 0,
+    "mismatch": 0,
+    "invalid_ref": 0,
+    "unverified": 0,
+    "benchmark": 0,
+    "flags": 0
+   },
+   "C": {
+    "total": 34,
+    "supported": 34,
+    "problems": 0,
+    "mismatch": 0,
+    "invalid_ref": 0,
+    "unverified": 0,
+    "benchmark": 0,
+    "flags": 0,
+    "cost_cny": 0.317711,
+    "elapsed_s": 74.335,
+    "revised": false,
+    "revision_failed": false
+   }
+  },
+  {
+   "code": "002069",
+   "name": "獐子岛",
+   "A": {
+    "total": 0,
+    "supported": 0,
+    "problems": 0,
+    "mismatch": 0,
+    "invalid_ref": 0,
+    "unverified": 0,
+    "benchmark": 0,
+    "flags": 0,
+    "period": {
+     "current": 0,
+     "prior_stated": 0,
+     "prior_conflict": 0,
+     "prior_unstated": 0
+    },
+    "cost_cny": 0.140452,
+    "elapsed_s": 85.767
+   },
+   "B": {
+    "total": 38,
+    "supported": 38,
+    "problems": 0,
+    "mismatch": 0,
+    "invalid_ref": 0,
+    "unverified": 0,
+    "benchmark": 0,
+    "flags": 0
+   },
+   "C": {
+    "total": 38,
+    "supported": 38,
+    "problems": 0,
+    "mismatch": 0,
+    "invalid_ref": 0,
+    "unverified": 0,
+    "benchmark": 0,
+    "flags": 0,
+    "cost_cny": 0.318785,
+    "elapsed_s": 75.049,
+    "revised": false,
+    "revision_failed": false
+   }
+  },
+  {
+   "code": "002450",
+   "name": "康得退",
+   "A": {
+    "total": 7,
+    "supported": 0,
+    "problems": 7,
+    "mismatch": 0,
+    "invalid_ref": 0,
+    "unverified": 7,
+    "benchmark": 0,
+    "flags": 0,
+    "period": {
+     "current": 0,
+     "prior_stated": 0,
+     "prior_conflict": 0,
+     "prior_unstated": 0
+    },
+    "cost_cny": 0.169203,
+    "elapsed_s": 102.153
+   },
+   "B": {
+    "total": 47,
+    "supported": 47,
+    "problems": 0,
+    "mismatch": 0,
+    "invalid_ref": 0,
+    "unverified": 0,
+    "benchmark": 0,
+    "flags": 0
+   },
+   "C": {
+    "total": 47,
+    "supported": 47,
+    "problems": 0,
+    "mismatch": 0,
+    "invalid_ref": 0,
+    "unverified": 0,
+    "benchmark": 0,
+    "flags": 0,
+    "cost_cny": 0.306121,
+    "elapsed_s": 67.959,
+    "revised": false,
+    "revision_failed": false
+   }
+  },
+  {
+   "code": "300750",
+   "name": "宁德时代",
+   "A": {
+    "total": 17,
+    "supported": 7,
+    "problems": 10,
+    "mismatch": 0,
+    "invalid_ref": 0,
+    "unverified": 10,
+    "benchmark": 0,
+    "flags": 0,
+    "period": {
+     "current": 0,
+     "prior_stated": 2,
+     "prior_conflict": 0,
+     "prior_unstated": 5
+    },
+    "cost_cny": 0.143133,
+    "elapsed_s": 79.307
+   },
+   "B": {
+    "total": 39,
+    "supported": 39,
+    "problems": 0,
+    "mismatch": 0,
+    "invalid_ref": 0,
+    "unverified": 0,
+    "benchmark": 0,
+    "flags": 0
+   },
+   "C": {
+    "total": 39,
+    "supported": 39,
+    "problems": 0,
+    "mismatch": 0,
+    "invalid_ref": 0,
+    "unverified": 0,
+    "benchmark": 0,
+    "flags": 0,
+    "cost_cny": 0.325782,
+    "elapsed_s": 82.538,
+    "revised": false,
+    "revision_failed": false
+   }
+  },
+  {
+   "code": "600518",
+   "name": "康美药业",
+   "A": {
+    "total": 11,
+    "supported": 3,
+    "problems": 8,
+    "mismatch": 0,
+    "invalid_ref": 0,
+    "unverified": 8,
+    "benchmark": 0,
+    "flags": 0,
+    "period": {
+     "current": 0,
+     "prior_stated": 2,
+     "prior_conflict": 0,
+     "prior_unstated": 1
+    },
+    "cost_cny": 0.203271,
+    "elapsed_s": 109.506
+   },
+   "B": {
+    "total": 31,
+    "supported": 31,
+    "problems": 0,
+    "mismatch": 0,
+    "invalid_ref": 0,
+    "unverified": 0,
+    "benchmark": 0,
+    "flags": 0
+   },
+   "C": {
+    "total": 31,
+    "supported": 31,
+    "problems": 0,
+    "mismatch": 0,
+    "invalid_ref": 0,
+    "unverified": 0,
+    "benchmark": 0,
+    "flags": 0,
+    "cost_cny": 0.312349,
+    "elapsed_s": 69.157,
+    "revised": false,
+    "revision_failed": false
+   }
+  },
+  {
+   "code": "600519",
+   "name": "贵州茅台",
+   "A": {
+    "total": 34,
+    "supported": 7,
+    "problems": 27,
+    "mismatch": 0,
+    "invalid_ref": 0,
+    "unverified": 27,
+    "benchmark": 2,
+    "flags": 1,
+    "period": {
+     "current": 0,
+     "prior_stated": 2,
+     "prior_conflict": 2,
+     "prior_unstated": 3
+    },
+    "cost_cny": 0.312113,
+    "elapsed_s": 155.496
+   },
+   "B": {
+    "total": 37,
+    "supported": 37,
+    "problems": 0,
+    "mismatch": 0,
+    "invalid_ref": 0,
+    "unverified": 0,
+    "benchmark": 0,
+    "flags": 0
+   },
+   "C": {
+    "total": 37,
+    "supported": 37,
+    "problems": 0,
+    "mismatch": 0,
+    "invalid_ref": 0,
+    "unverified": 0,
+    "benchmark": 0,
+    "flags": 0,
+    "cost_cny": 0.326656,
+    "elapsed_s": 82.147,
+    "revised": false,
+    "revision_failed": false
+   }
+  }
+ ],
+ "audit": null
+}

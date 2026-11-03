@@ -1,0 +1,129 @@
+{
+ "note": "费用为客户端估算（按返回用量 / 公开标价，单价不含适用税费；响应不明、非 200 且不能确定未计费的请求、未结算的请求按占用上界计），不是服务商账单；以服务商控制台为准",
+ "total_cost_cny_est": 5.164187,
+ "settled_cny": 5.164187,
+ "unsettled_cny": 0,
+ "unsettled_requests": [],
+ "requests": 19,
+ "attempts": [
+  {
+   "ev": "company",
+   "code": "600519",
+   "status": "done",
+   "detail": "",
+   "at": "2026-11-02T14:57:56Z"
+  },
+  {
+   "ev": "company",
+   "code": "000858",
+   "status": "done",
+   "detail": "",
+   "at": "2026-11-02T15:00:42Z"
+  },
+  {
+   "ev": "company",
+   "code": "000568",
+   "status": "done",
+   "detail": "",
+   "at": "2026-11-02T15:03:54Z"
+  },
+  {
+   "ev": "company",
+   "code": "000651",
+   "status": "done",
+   "detail": "",
+   "at": "2026-11-02T15:07:09Z"
+  },
+  {
+   "ev": "company",
+   "code": "300750",
+   "status": "done",
+   "detail": "",
+   "at": "2026-11-02T15:09:51Z"
+  },
+  {
+   "ev": "company",
+   "code": "000002",
+   "status": "done",
+   "detail": "",
+   "at": "2026-11-02T15:12:54Z"
+  },
+  {
+   "ev": "company",
+   "code": "600518",
+   "status": "done",
+   "detail": "",
+   "at": "2026-11-02T15:15:53Z"
+  },
+  {
+   "ev": "company",
+   "code": "002450",
+   "status": "done",
+   "detail": "",
+   "at": "2026-11-02T15:18:43Z"
+  },
+  {
+   "ev": "company",
+   "code": "002069",
+   "status": "error",
+   "detail": "kimi 调用多次重试后仍失败（网络错误：RemoteProtocolError: Server disconnected without sending a response.）",
+   "at": "2026-11-02T15:21:43Z"
+  },
+  {
+   "ev": "company",
+   "code": "002069",
+   "status": "done",
+   "detail": "",
+   "at": "2026-11-02T15:24:55Z"
+  }
+ ],
+ "by_code": {
+  "600519": {
+   "cost": 0.638769,
+   "requests": 2,
+   "unsettled": 0
+  },
+  "000858": {
+   "cost": 0.481788,
+   "requests": 2,
+   "unsettled": 0
+  },
+  "000568": {
+   "cost": 0.530814,
+   "requests": 2,
+   "unsettled": 0
+  },
+  "000651": {
+   "cost": 0.52399,
+   "requests": 2,
+   "unsettled": 0
+  },
+  "300750": {
+   "cost": 0.468915,
+   "requests": 2,
+   "unsettled": 0
+  },
+  "000002": {
+   "cost": 0.505292,
+   "requests": 2,
+   "unsettled": 0
+  },
+  "600518": {
+   "cost": 0.51562,
+   "requests": 2,
+   "unsettled": 0
+  },
+  "002450": {
+   "cost": 0.475324,
+   "requests": 2,
+   "unsettled": 0
+  },
+  "002069": {
+   "cost": 1.023677,
+   "requests": 3,
+   "unsettled": 0
+  }
+ },
+ "corrupt": false,
+ "bad_lines": 0
+}

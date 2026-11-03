@@ -1,0 +1,48 @@
+{"ev": "reserve", "id": "d1bc5651366b", "model": "kimi-k3.1-pro", "reserved": 0.564479, "code": "600519", "stage": "A", "at": "2026-11-02T14:53:59Z"}
+{"ev": "settle", "id": "d1bc5651366b", "charged": 0.312113, "exact": true, "usage": {"prompt_tokens": 193, "completion_tokens": 4553, "total_tokens": 4746, "reasoning_tokens": 2920, "cache_write_tokens": 0}, "code": "600519", "stage": "A", "at": "2026-11-02T14:56:34Z"}
+{"ev": "reserve", "id": "f474ed1f7840", "model": "kimi-k3.1-pro", "reserved": 0.813845, "code": "600519", "stage": "C", "at": "2026-11-02T14:56:34Z"}
+{"ev": "settle", "id": "f474ed1f7840", "charged": 0.326656, "exact": true, "usage": {"prompt_tokens": 6236, "completion_tokens": 2437, "total_tokens": 8673, "reasoning_tokens": 1397, "cache_write_tokens": 6144}, "code": "600519", "stage": "C", "at": "2026-11-02T14:57:56Z"}
+{"ev": "company", "code": "600519", "status": "done", "detail": "", "at": "2026-11-02T14:57:56Z"}
+{"ev": "reserve", "id": "519955653e3a", "model": "kimi-k3.1-pro", "reserved": 0.56444, "code": "000858", "stage": "A", "at": "2026-11-02T14:57:56Z"}
+{"ev": "settle", "id": "519955653e3a", "charged": 0.164077, "exact": true, "usage": {"prompt_tokens": 193, "completion_tokens": 2376, "total_tokens": 2569, "reasoning_tokens": 982, "cache_write_tokens": 0}, "code": "000858", "stage": "A", "at": "2026-11-02T14:59:27Z"}
+{"ev": "reserve", "id": "2e7c7a8d183a", "model": "kimi-k3.1-pro", "reserved": 0.824245, "code": "000858", "stage": "C", "at": "2026-11-02T14:59:27Z"}
+{"ev": "settle", "id": "2e7c7a8d183a", "charged": 0.3177108, "exact": true, "usage": {"prompt_tokens": 6406, "completion_tokens": 2317, "total_tokens": 8723, "cached_tokens": 256, "reasoning_tokens": 1164, "prompt_tokens_details.cached_tokens": 256, "cache_write_tokens": 6144}, "code": "000858", "stage": "C", "at": "2026-11-02T15:00:42Z"}
+{"ev": "company", "code": "000858", "status": "done", "detail": "", "at": "2026-11-02T15:00:42Z"}
+{"ev": "reserve", "id": "33697b6996a1", "model": "kimi-k3.1-pro", "reserved": 0.564479, "code": "000568", "stage": "A", "at": "2026-11-02T15:00:42Z"}
+{"ev": "settle", "id": "33697b6996a1", "charged": 0.228473, "exact": true, "usage": {"prompt_tokens": 193, "completion_tokens": 3323, "total_tokens": 3516, "reasoning_tokens": 1785, "cache_write_tokens": 0}, "code": "000568", "stage": "A", "at": "2026-11-02T15:02:45Z"}
+{"ev": "reserve", "id": "de692bb17405", "model": "kimi-k3.1-pro", "reserved": 0.817537, "code": "000568", "stage": "C", "at": "2026-11-02T15:02:45Z"}
+{"ev": "settle", "id": "de692bb17405", "charged": 0.30234079999999997, "exact": true, "usage": {"prompt_tokens": 6280, "completion_tokens": 2164, "total_tokens": 8444, "cached_tokens": 256, "reasoning_tokens": 1056, "prompt_tokens_details.cached_tokens": 256, "cache_write_tokens": 5888}, "code": "000568", "stage": "C", "at": "2026-11-02T15:03:54Z"}
+{"ev": "company", "code": "000568", "status": "done", "detail": "", "at": "2026-11-02T15:03:54Z"}
+{"ev": "reserve", "id": "2f7fcfb00fcf", "model": "kimi-k3.1-pro", "reserved": 0.564479, "code": "000651", "stage": "A", "at": "2026-11-02T15:03:54Z"}
+{"ev": "settle", "id": "2f7fcfb00fcf", "charged": 0.200593, "exact": true, "usage": {"prompt_tokens": 193, "completion_tokens": 2913, "total_tokens": 3106, "reasoning_tokens": 1414, "cache_write_tokens": 0}, "code": "000651", "stage": "A", "at": "2026-11-02T15:05:45Z"}
+{"ev": "reserve", "id": "fc6a68f45a99", "model": "kimi-k3.1-pro", "reserved": 0.811219, "code": "000651", "stage": "C", "at": "2026-11-02T15:05:45Z"}
+{"ev": "settle", "id": "fc6a68f45a99", "charged": 0.3233968, "exact": true, "usage": {"prompt_tokens": 6184, "completion_tokens": 2492, "total_tokens": 8676, "cached_tokens": 256, "reasoning_tokens": 1578, "prompt_tokens_details.cached_tokens": 256, "cache_write_tokens": 5888}, "code": "000651", "stage": "C", "at": "2026-11-02T15:07:09Z"}
+{"ev": "company", "code": "000651", "status": "done", "detail": "", "at": "2026-11-02T15:07:09Z"}
+{"ev": "reserve", "id": "158f424b651c", "model": "kimi-k3.1-pro", "reserved": 0.564479, "code": "300750", "stage": "A", "at": "2026-11-02T15:07:09Z"}
+{"ev": "settle", "id": "158f424b651c", "charged": 0.143133, "exact": true, "usage": {"prompt_tokens": 193, "completion_tokens": 2068, "total_tokens": 2261, "reasoning_tokens": 525, "cache_write_tokens": 0}, "code": "300750", "stage": "A", "at": "2026-11-02T15:08:28Z"}
+{"ev": "reserve", "id": "98756939db2e", "model": "kimi-k3.1-pro", "reserved": 0.809087, "code": "300750", "stage": "C", "at": "2026-11-02T15:08:28Z"}
+{"ev": "settle", "id": "98756939db2e", "charged": 0.3257818, "exact": true, "usage": {"prompt_tokens": 6153, "completion_tokens": 2533, "total_tokens": 8686, "cached_tokens": 256, "reasoning_tokens": 1467, "prompt_tokens_details.cached_tokens": 256, "cache_write_tokens": 5888}, "code": "300750", "stage": "C", "at": "2026-11-02T15:09:51Z"}
+{"ev": "company", "code": "300750", "status": "done", "detail": "", "at": "2026-11-02T15:09:51Z"}
+{"ev": "reserve", "id": "e6746023539b", "model": "kimi-k3.1-pro", "reserved": 0.564414, "code": "000002", "stage": "A", "at": "2026-11-02T15:09:51Z"}
+{"ev": "settle", "id": "e6746023539b", "charged": 0.187686, "exact": true, "usage": {"prompt_tokens": 194, "completion_tokens": 2723, "total_tokens": 2917, "reasoning_tokens": 1215, "cache_write_tokens": 0}, "code": "000002", "stage": "A", "at": "2026-11-02T15:11:36Z"}
+{"ev": "reserve", "id": "8c600e7e9a25", "model": "kimi-k3.1-pro", "reserved": 0.836868, "code": "000002", "stage": "C", "at": "2026-11-02T15:11:36Z"}
+{"ev": "settle", "id": "8c600e7e9a25", "charged": 0.3176058, "exact": true, "usage": {"prompt_tokens": 6665, "completion_tokens": 2217, "total_tokens": 8882, "cached_tokens": 256, "reasoning_tokens": 1146, "prompt_tokens_details.cached_tokens": 256, "cache_write_tokens": 6400}, "code": "000002", "stage": "C", "at": "2026-11-02T15:12:54Z"}
+{"ev": "company", "code": "000002", "status": "done", "detail": "", "at": "2026-11-02T15:12:54Z"}
+{"ev": "reserve", "id": "e9e9376c957b", "model": "kimi-k3.1-pro", "reserved": 0.564479, "code": "600518", "stage": "A", "at": "2026-11-02T15:12:54Z"}
+{"ev": "settle", "id": "e9e9376c957b", "charged": 0.203271, "exact": true, "usage": {"prompt_tokens": 195, "completion_tokens": 2952, "total_tokens": 3147, "reasoning_tokens": 1508, "cache_write_tokens": 0}, "code": "600518", "stage": "A", "at": "2026-11-02T15:14:44Z"}
+{"ev": "reserve", "id": "c0722d5c7b35", "model": "kimi-k3.1-pro", "reserved": 0.831252, "code": "600518", "stage": "C", "at": "2026-11-02T15:14:44Z"}
+{"ev": "settle", "id": "c0722d5c7b35", "charged": 0.3123488, "exact": true, "usage": {"prompt_tokens": 6548, "completion_tokens": 2211, "total_tokens": 8759, "cached_tokens": 256, "reasoning_tokens": 1081, "prompt_tokens_details.cached_tokens": 256, "cache_write_tokens": 6144}, "code": "600518", "stage": "C", "at": "2026-11-02T15:15:53Z"}
+{"ev": "company", "code": "600518", "status": "done", "detail": "", "at": "2026-11-02T15:15:53Z"}
+{"ev": "reserve", "id": "f2da526611ce", "model": "kimi-k3.1-pro", "reserved": 0.56444, "code": "002450", "stage": "A", "at": "2026-11-02T15:15:53Z"}
+{"ev": "settle", "id": "f2da526611ce", "charged": 0.169203, "exact": true, "usage": {"prompt_tokens": 195, "completion_tokens": 2451, "total_tokens": 2646, "reasoning_tokens": 1084, "cache_write_tokens": 0}, "code": "002450", "stage": "A", "at": "2026-11-02T15:17:35Z"}
+{"ev": "reserve", "id": "7ebc4016c738", "model": "kimi-k3.1-pro", "reserved": 0.780344, "code": "002450", "stage": "C", "at": "2026-11-02T15:17:35Z"}
+{"ev": "settle", "id": "7ebc4016c738", "charged": 0.30612079999999997, "exact": true, "usage": {"prompt_tokens": 5288, "completion_tokens": 2605, "total_tokens": 7893, "cached_tokens": 256, "reasoning_tokens": 1443, "prompt_tokens_details.cached_tokens": 256, "cache_write_tokens": 4864}, "code": "002450", "stage": "C", "at": "2026-11-02T15:18:43Z"}
+{"ev": "company", "code": "002450", "status": "done", "detail": "", "at": "2026-11-02T15:18:43Z"}
+{"ev": "reserve", "id": "e84c13eb46db", "model": "kimi-k3.1-pro", "reserved": 0.56444, "code": "002069", "stage": "A", "at": "2026-11-02T15:18:43Z"}
+{"ev": "settle", "id": "e84c13eb46db", "charged": 0.56444, "exact": false, "code": "002069", "stage": "A", "at": "2026-11-02T15:21:43Z"}
+{"ev": "company", "code": "002069", "status": "error", "detail": "kimi 调用多次重试后仍失败（网络错误：RemoteProtocolError: Server disconnected without sending a response.）", "at": "2026-11-02T15:21:43Z"}
+{"ev": "reserve", "id": "d763fe649448", "model": "kimi-k3.1-pro", "reserved": 0.56444, "code": "002069", "stage": "A", "at": "2026-11-02T15:22:14Z"}
+{"ev": "settle", "id": "d763fe649448", "charged": 0.140452, "exact": true, "usage": {"prompt_tokens": 196, "completion_tokens": 2028, "total_tokens": 2224, "reasoning_tokens": 507, "cache_write_tokens": 0}, "code": "002069", "stage": "A", "at": "2026-11-02T15:23:40Z"}
+{"ev": "reserve", "id": "dcc2e414e2db", "model": "kimi-k3.1-pro", "reserved": 0.830654, "code": "002069", "stage": "C", "at": "2026-11-02T15:23:40Z"}
+{"ev": "settle", "id": "dcc2e414e2db", "charged": 0.3187848, "exact": true, "usage": {"prompt_tokens": 6520, "completion_tokens": 2311, "total_tokens": 8831, "cached_tokens": 256, "reasoning_tokens": 1248, "prompt_tokens_details.cached_tokens": 256, "cache_write_tokens": 6144}, "code": "002069", "stage": "C", "at": "2026-11-02T15:24:55Z"}
+{"ev": "company", "code": "002069", "status": "done", "detail": "", "at": "2026-11-02T15:24:55Z"}

@@ -1,0 +1,407 @@
+{
+ "S001": {
+  "groups": [
+   "A"
+  ],
+  "code": "000651",
+  "number": "+3.39%",
+  "sentence": "| 期末总资产 | 3,680.47亿元 | +3.39% | 资产规模庞大 |",
+  "verifier_status": "unverified"
+ },
+ "S002": {
+  "groups": [
+   "C"
+  ],
+  "code": "002069",
+  "number": "0.49 倍",
+  "sentence": "流动比率由 0.74 倍[E49]升至 1.15 倍[E48]，现金短债比由 0.31 倍[E55]升至 0.49 倍[E54]，部分指标边际改善，但尚不足以消除偿债压力。",
+  "verifier_status": "verified"
+ },
+ "S003": {
+  "groups": [
+   "C"
+  ],
+  "code": "000651",
+  "number": "16.51 倍",
+  "sentence": "利息保障倍数为 18.63 倍[E59]，高于2024年的 16.51 倍[E60]。",
+  "verifier_status": "verified"
+ },
+ "S004": {
+  "groups": [
+   "A"
+  ],
+  "code": "600519",
+  "number": "924.64亿元",
+  "sentence": "**2024年归母净利润862.28亿元、经营现金流净额924.64亿元，经营现金流对利润形成较好覆盖；",
+  "verifier_status": "unverified"
+ },
+ "S005": {
+  "groups": [
+   "A"
+  ],
+  "code": "000651",
+  "number": "26.53%",
+  "sentence": "| 加权平均净资产收益率 | 26.53% | +2.04个百分点 | 历史资本回报水平较高 |",
+  "verifier_status": "unverified"
+ },
+ "S006": {
+  "groups": [
+   "A"
+  ],
+  "code": "000568",
+  "number": "302.33亿元",
+  "sentence": "| 营业收入 | 302.33亿元 | 311.96亿元 | 231.27亿元 |",
+  "verifier_status": "unattributed"
+ },
+ "S007": {
+  "groups": [
+   "C"
+  ],
+  "code": "300750",
+  "number": "103.1 天",
+  "sentence": "应收类周转天数由2024年的 120.6 天[E81]降至2025年的 103.1 天[E80]，现金转换周期为 23.1 天[E89]。",
+  "verifier_status": "verified"
+ },
+ "S008": {
+  "groups": [
+   "C"
+  ],
+  "code": "002450",
+  "number": "3.00",
+  "sentence": "- Piotroski F-Score由2024年3.00[E85]升至2025年4.00[E84]，仅为模型层面的边际线索，不能抵消上述高风险信号。",
+  "verifier_status": "verified"
+ },
+ "S009": {
+  "groups": [
+   "C"
+  ],
+  "code": "600518",
+  "number": "8.96 倍",
+  "sentence": "- 2025年经营活动现金流量净额转为 1.11 亿元[E5]，净现比为 8.96 倍[E32]，收现比为 1.04 倍[E35]，当年利润的现金匹配程度明显改善。",
+  "verifier_status": "verified"
+ },
+ "S010": {
+  "groups": [
+   "B"
+  ],
+  "code": "300750",
+  "number": "65.24%",
+  "sentence": "** 2025年资产负债率为 61.94%[E47]，低于2024年的 65.24%[E48]；",
+  "verifier_status": "verified"
+ },
+ "S011": {
+  "groups": [
+   "C"
+  ],
+  "code": "002450",
+  "number": "0.54倍",
+  "sentence": "收现比2025年0.54倍[E30]、2024年0.47倍[E31]，连续两年低于0.80倍[E110]；",
+  "verifier_status": "verified"
+ },
+ "S012": {
+  "groups": [
+   "B"
+  ],
+  "code": "000651",
+  "number": "2.39 倍",
+  "sentence": "** 现金短债比由2024年的 2.39 倍[E57]降至2025年的 1.74 倍[E56]，流动比率由 1.12 倍[E51]降至 1.08 倍[E50]；",
+  "verifier_status": "verified"
+ },
+ "S013": {
+  "groups": [
+   "C"
+  ],
+  "code": "000858",
+  "number": "0.22%",
+  "sentence": "** 2025年货币资金为 **1,270.14 亿元[E8]**，现金短债比为 **348.80 倍[E56]**，利息保障倍数为 **427.92 倍[E59]**，有息负债率为 **0.22%[E62]**。",
+  "verifier_status": "verified"
+ },
+ "S014": {
+  "groups": [
+   "A"
+  ],
+  "code": "000002",
+  "number": "1,582.8亿元",
+  "sentence": "| 一年内到期有息负债 | 1,582.8亿元 | 短期偿付压力集中 |",
+  "verifier_status": "unverified"
+ },
+ "S015": {
+  "groups": [
+   "B"
+  ],
+  "code": "000568",
+  "number": "94.04 倍",
+  "sentence": "- 2025年货币资金为 273.42 亿元[E8]，流动比率为 3.86 倍[E50]、速动比率为 2.58 倍[E53]，利息保障倍数为 94.04 倍[E59]，短期偿债和利息偿付能力较强。",
+  "verifier_status": "verified"
+ },
+ "S016": {
+  "groups": [
+   "B"
+  ],
+  "code": "002450",
+  "number": "-1,748.51万元",
+  "sentence": "3. **经营持续失血**：经营活动现金流量净额2025年为-1,748.51万元[E5]、2024年为-2,064.38万元[E13]、2023年为-1,842.93万元[E107]，2025年净现比-0.20倍[E29]，主业不能自我造血。",
+  "verifier_status": "verified"
+ },
+ "S017": {
+  "groups": [
+   "A"
+  ],
+  "code": "000651",
+  "number": "+96.73%",
+  "sentence": "| 经营活动现金流净额 | 563.98亿元 | +96.73% | 当年现金回款表现突出 |",
+  "verifier_status": "unattributed"
+ },
+ "S018": {
+  "groups": [
+   "B"
+  ],
+  "code": "002450",
+  "number": "1.10",
+  "sentence": "5. **预警模型提示困境**：2025年Altman Z''-Score为-95.36[E81]，低于困境区上限1.10[E108]，其中留存收益/总资产为-1825.42%[E95]、账面权益/总负债为-0.91倍[E97]，该结果仅为风险线索。",
+  "verifier_status": "verified"
+ },
+ "S019": {
+  "groups": [
+   "C"
+  ],
+  "code": "600518",
+  "number": "20.65%",
+  "sentence": "期间费用率为 20.65%[E29]，高于毛利率 19.97%[E17]，主业利润安全垫较薄。",
+  "verifier_status": "verified"
+ },
+ "S020": {
+  "groups": [
+   "B"
+  ],
+  "code": "600519",
+  "number": "2.60",
+  "sentence": "** Altman Z''-Score为14.87[E110]，高于安全区下限2.60[E140]；",
+  "verifier_status": "verified"
+ },
+ "S021": {
+  "groups": [
+   "B"
+  ],
+  "code": "000002",
+  "number": "2.00",
+  "sentence": "Piotroski F-Score 为 2.00[E110]，满分为 9[E138]。",
+  "verifier_status": "verified"
+ },
+ "S022": {
+  "groups": [
+   "B"
+  ],
+  "code": "000568",
+  "number": "87.54%",
+  "sentence": "**2025年毛利率为 86.62%[E17]，低于上年的 87.54%[E18]；",
+  "verifier_status": "verified"
+ },
+ "S023": {
+  "groups": [
+   "B"
+  ],
+  "code": "000858",
+  "number": "130.8 天",
+  "sentence": "应收类周转天数也由2024年的 **69.1 天[E81]** 升至2025年的 **130.8 天[E80]**，销售回款与渠道政策需要结合明细进一步判断。",
+  "verifier_status": "verified"
+ },
+ "S024": {
+  "groups": [
+   "C"
+  ],
+  "code": "300750",
+  "number": "26.27%",
+  "sentence": "毛利率为 26.27%[E17]、销售净利率为 18.12%[E20]、平均净资产收益率为 24.72%[E23]，均高于2024年对应指标。",
+  "verifier_status": "verified"
+ },
+ "S025": {
+  "groups": [
+   "A"
+  ],
+  "code": "000568",
+  "number": "+27.79%",
+  "sentence": "| 归母净利润同比 | +27.79% | +1.71% | -7.17% |",
+  "verifier_status": "unattributed"
+ },
+ "S026": {
+  "groups": [
+   "B"
+  ],
+  "code": "000651",
+  "number": "29.43%",
+  "sentence": "** 2025年毛利率为 29.81%[E17]，略高于2024年的 29.43%[E18]；",
+  "verifier_status": "verified"
+ },
+ "S027": {
+  "groups": [
+   "C"
+  ],
+  "code": "002450",
+  "number": "-1,842.93万元",
+  "sentence": "3. **经营持续失血**：经营活动现金流量净额2025年为-1,748.51万元[E5]、2024年为-2,064.38万元[E13]、2023年为-1,842.93万元[E107]，2025年净现比-0.20倍[E29]，主业不能自我造血。",
+  "verifier_status": "verified"
+ },
+ "S028": {
+  "groups": [
+   "A"
+  ],
+  "code": "000858",
+  "number": "0.8",
+  "sentence": "8. 可设置以下研究预警线，而非会计违规标准：**经营现金流/归母净利润持续低于0.8、合同负债显著下降且应收项目同步增加、销售费用率上升但收入仍下滑、核心产品批价持续低于渠道可持续经营水平**。",
+  "verifier_status": "unverified"
+ },
+ "S029": {
+  "groups": [
+   "B"
+  ],
+  "code": "600519",
+  "number": "0.03%",
+  "sentence": "** 毛利率为91.18%[E17]，销售净利率为50.53%[E20]，净资产收益率（平均）为34.46%[E23]，非经常性损益占比仅0.03%[E41]。",
+  "verifier_status": "verified"
+ },
+ "S030": {
+  "groups": [
+   "A"
+  ],
+  "code": "300750",
+  "number": "507.45亿元",
+  "sentence": "| 归母净利润 | 507.45亿元，同比增长15.01% | 利润增速是否继续显著高于收入增速 |",
+  "verifier_status": "unattributed"
+ },
+ "S031": {
+  "groups": [
+   "C"
+  ],
+  "code": "000002",
+  "number": "9",
+  "sentence": "Piotroski F-Score 为 2.00[E110]，满分为 9[E138]。",
+  "verifier_status": "verified"
+ },
+ "S032": {
+  "groups": [
+   "C"
+  ],
+  "code": "002450",
+  "number": "8,629.87万元",
+  "sentence": "- 2025年账面扭亏，归母净利润8,629.87万元[E3]，上年为-5.14亿元[E11]；",
+  "verifier_status": "verified"
+ },
+ "S033": {
+  "groups": [
+   "A"
+  ],
+  "code": "000568",
+  "number": "43.18%",
+  "sentence": "**即使增速明显下降，2024年公司仍实现311.96亿元收入和134.73亿元归母净利润，归母净利率约43.18%；",
+  "verifier_status": "unverified"
+ },
+ "S034": {
+  "groups": [
+   "A"
+  ],
+  "code": "000002",
+  "number": "80.6%",
+  "sentence": "| 净负债率 | 约80.6% | 财务杠杆明显上升 |",
+  "verifier_status": "unverified"
+ },
+ "S035": {
+  "groups": [
+   "C"
+  ],
+  "code": "002450",
+  "number": "147.49%",
+  "sentence": "4. **利润依赖非经常性损益**：2025年营业收入仅114.32万元[E1]，归母净利润8,629.87万元[E3]完全由非经常性项目撑起，扣非归母净利润-4,098.72万元[E4]、非经常性损益占比147.49%[E36]，盈利不可持续的风险高。",
+  "verifier_status": "verified"
+ },
+ "S036": {
+  "groups": [
+   "C"
+  ],
+  "code": "000568",
+  "number": "1.08 倍",
+  "sentence": "- 收现比仍为 1.08 倍[E35]，应收类周转天数降至 23.3 天[E80]；",
+  "verifier_status": "verified"
+ },
+ "S037": {
+  "groups": [
+   "A"
+  ],
+  "code": "600518",
+  "number": "10个百分点",
+  "sentence": "若应收或存货增速高于收入增速10个百分点以上，应专项解释。",
+  "verifier_status": "unverified"
+ },
+ "S038": {
+  "groups": [
+   "A"
+  ],
+  "code": "600519",
+  "number": "32.1%",
+  "sentence": "2024年末合同负债已同比下降约32.1%，该指标本身不等同于需求恶化，但与收入放缓同时出现时，需要提高关注。",
+  "verifier_status": "unverified"
+ },
+ "S039": {
+  "groups": [
+   "B"
+  ],
+  "code": "002069",
+  "number": "0.96 倍",
+  "sentence": "资产负债率达 96.83%[E45]，利息保障倍数仅 0.96 倍[E57]，现金短债比为 0.49 倍[E54]，偿债与流动性风险突出。",
+  "verifier_status": "verified"
+ },
+ "S040": {
+  "groups": [
+   "C"
+  ],
+  "code": "002450",
+  "number": "114.32万元",
+  "sentence": "4. **利润依赖非经常性损益**：2025年营业收入仅114.32万元[E1]，归母净利润8,629.87万元[E3]完全由非经常性项目撑起，扣非归母净利润-4,098.72万元[E4]、非经常性损益占比147.49%[E36]，盈利不可持续的风险高。",
+  "verifier_status": "verified"
+ },
+ "S041": {
+  "groups": [
+   "A"
+  ],
+  "code": "000651",
+  "number": "26.53%",
+  "sentence": "- **历史主业盈利能力较强：**2023年归母净利润和扣非净利润均实现双位数增长，加权ROE达到26.53%。",
+  "verifier_status": "unverified"
+ },
+ "S042": {
+  "groups": [
+   "B"
+  ],
+  "code": "000858",
+  "number": "297.06 亿元",
+  "sentence": "** 2025年经营活动产生的现金流量净额为 **297.06 亿元[E5]**，净现比为 **3.19 倍[E32]**，简化自由现金流为 **277.39 亿元[E44]**，是盈利质量的重要缓释因素。",
+  "verifier_status": "verified"
+ },
+ "S043": {
+  "groups": [
+   "B"
+  ],
+  "code": "600518",
+  "number": "9",
+  "sentence": "- 2025年 Piotroski F-Score 为 8.00[E109]，满分 9[E140]，提供基本面改善的模型线索；",
+  "verifier_status": "verified"
+ },
+ "S044": {
+  "groups": [
+   "A"
+  ],
+  "code": "600519",
+  "number": "+0.35%",
+  "sentence": "| 第三季度单季营业总收入 | — | 390.64亿元，同比+0.35% | 单季接近零增长 |",
+  "verifier_status": "unverified"
+ },
+ "S045": {
+  "groups": [
+   "B"
+  ],
+  "code": "002450",
+  "number": "49854.0天",
+  "sentence": "4. 核查营业收入仅114.32万元[E1]对应的业务合同与经营实质，并解释应付账款周转天数49854.0天[E72]背后的长期挂账、债权债务抵销及营业成本口径。",
+  "verifier_status": "verified"
+ }
+}

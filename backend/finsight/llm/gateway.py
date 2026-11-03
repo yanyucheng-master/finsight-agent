@@ -71,13 +71,44 @@ class LLMClient(Protocol):
              json_mode: bool = False) -> LLMResponse: ...
 
 
+# 这些 HTTP 状态是请求在推理之前就被拒绝（参数 / 鉴权 / 余额 / 不存在 / 校验失败），不会产生推理费用，且重试没有意义。
+# 其他非 200（429、5xx、网关超时等）无法证明服务端没有开始计费：官方价格页没有写失败请求是否计费，按占用上界保守记账。
+NOT_BILLED_STATUS = (400, 401, 402, 403, 404, 422)
+
+
 def estimate_cost_cny(model: str, usage: dict[str, int]) -> float:
-    """按公开标价估算一次调用的费用（元，不含税）。"""
+    """按公开标价估算一次调用的费用（元，不含适用税费）。
+
+    保守处理：缓存命中只取响应明确给出的 cached_tokens / prompt_cache_hit_tokens，其余输入都按未命中价（缓存写入
+    5 分钟档与未命中价相同）；usage 里若出现缓存写入类字段，对这部分再按未命中价追加一份（假设最贵的 1 小时档 = 2 倍）；
+    输出 token 取 completion_tokens、total_tokens − prompt_tokens 中较大者，推理 token 比 completion_tokens 还多时视为额外产生。"""
     hit_p, miss_p, out_p = LLM_PRICES_CNY.get(model, FALLBACK_PRICE_CNY)
     prompt = int(usage.get("prompt_tokens", 0))
     hit = min(prompt, int(usage.get("prompt_cache_hit_tokens", 0) or usage.get("cached_tokens", 0)))
     out = int(usage.get("completion_tokens", 0))
-    return (hit * hit_p + (prompt - hit) * miss_p + out * out_p) / 1e6
+    total = int(usage.get("total_tokens", 0))
+    if total > prompt + out:
+        out = total - prompt
+    reasoning = int(usage.get("reasoning_tokens", 0))
+    if reasoning > out:
+        out += reasoning
+    premium = sum(int(v) for k, v in usage.items() if "cache" in k and ("creation" in k or "write" in k)) * miss_p
+    return (hit * hit_p + (prompt - hit) * miss_p + out * out_p + premium) / 1e6
+
+
+def billed_cost_or_none(model: str, usage: dict[str, int] | None) -> float | None:
+    """返回估算费用；缺少 prompt_tokens / completion_tokens 时无法估算 → None（调用方按占用上界记账）。"""
+    if not usage or "prompt_tokens" not in usage or "completion_tokens" not in usage:
+        return None
+    return estimate_cost_cny(model, usage)
+
+
+def reserve_upper_bound(model: str, payload: dict[str, Any]) -> float:
+    """一次请求的费用占用上界（元）：输入 UTF-8 字节数 × 未命中单价 + max_tokens × 输出单价。
+    BudgetGuard 发送前按它预留；评测脚本的 --dry-run 也用它预估，两处口径一致。"""
+    _, miss_p, out_p = LLM_PRICES_CNY.get(model, FALLBACK_PRICE_CNY)
+    nbytes = len(json.dumps({k: payload.get(k) for k in ("messages", "tools")}, ensure_ascii=False).encode("utf-8"))
+    return (nbytes * miss_p + int(payload.get("max_tokens", 0)) * out_p) / 1e6
 
 
 class BudgetGuard:
@@ -86,7 +117,8 @@ class BudgetGuard:
     * 每一次发送（包括重试）之前单独预留上界：输入 UTF-8 字节数 × 未命中单价 + max_tokens × 输出单价
       （一个 token 至少 1 字节，所以字节数是输入 token 的上界）；
     * 预留在同一把锁里原子地计入“占用”，并发请求不能共用同一份余额；
-    * 成功：按返回用量结算；返回 HTTP 错误：服务端拒绝，不计费；超时 / 网络中断 / 无法解析：费用不明，按预留上界记账；
+    * 成功：按返回用量结算（缺少用量字段则按预留上界）；HTTP 400 / 401 / 402 / 403 / 404 / 422（推理之前被拒绝）不计费；
+      其他非 200（429、5xx 等）、超时 / 网络中断 / 无法解析：官方没有说明是否计费，不能当作没有收费，按预留上界记账；
     * 设置了预算但模型不在价格表中：拒绝发送（预算不明确时停止）。
     """
 
@@ -119,9 +151,7 @@ class BudgetGuard:
         limit = self.limit
         if limit > 0 and model not in LLM_PRICES_CNY:
             raise LLMError(f"费用保护：模型 {model} 不在价格表 config.LLM_PRICES_CNY 中，无法估算费用，已停止发送")
-        _, miss_p, out_p = LLM_PRICES_CNY.get(model, FALLBACK_PRICE_CNY)
-        nbytes = len(json.dumps({k: payload.get(k) for k in ("messages", "tools")}, ensure_ascii=False).encode("utf-8"))
-        amount = (nbytes * miss_p + int(payload.get("max_tokens", 0)) * out_p) / 1e6
+        amount = reserve_upper_bound(model, payload)
         with self._lock:
             if self.fault:
                 raise LLMError(f"费用保护：{self.fault}，已停止发送")
@@ -139,8 +169,8 @@ class BudgetGuard:
             stack.append(rid)
         return amount
 
-    def settle(self, reserved: float, actual: float | None) -> None:
-        """actual=None 表示费用不明，按预留上界记账。"""
+    def settle(self, reserved: float, actual: float | None, usage: dict[str, int] | None = None) -> None:
+        """actual=None 表示费用不明，按预留上界记账。usage（响应里的用量字段）随结算事件写进账本，便于事后和控制台核对。"""
         with self._lock:
             charged = reserved if actual is None else actual
             stack = self._tl.__dict__.get("stack") or []
@@ -148,7 +178,8 @@ class BudgetGuard:
             if rid is not None:
                 for fn in list(self.listeners):
                     try:
-                        fn({"ev": "settle", "id": rid, "charged": charged, "exact": actual is not None})
+                        fn({"ev": "settle", "id": rid, "charged": charged, "exact": actual is not None,
+                            **({"usage": usage} if usage else {})})
                     except Exception as exc:  # noqa: BLE001
                         # 账本里这笔仍是“只有占用、没有结算”，按预留上界计；内存里同样按上界，并停止后续发送
                         charged = reserved
@@ -291,12 +322,13 @@ class OpenAICompatibleClient:
                     except LLMError:
                         BUDGET.settle(reserved, None)
                         raise
-                    BUDGET.settle(reserved, estimate_cost_cny(self.settings.model, resp.usage) if resp.usage else None)
+                    BUDGET.settle(reserved, billed_cost_or_none(self.settings.model, resp.usage), usage=resp.usage)
                     return resp
-                BUDGET.settle(reserved, 0.0)
                 last = f"HTTP {r.status_code}: {r.text[:300]}"
-                if r.status_code in (400, 401, 402, 403, 404, 422):
+                if r.status_code in NOT_BILLED_STATUS:
+                    BUDGET.settle(reserved, 0.0)
                     raise LLMError(f"{self.settings.provider} 调用失败（{last}）")
+                BUDGET.settle(reserved, None)  # 429 / 5xx 等：不能证明没有计费，按占用上界记账
             if attempt < self.retries:
                 time.sleep(min(self.backoff_s * 2 ** attempt, 8))
         raise LLMError(f"{self.settings.provider} 调用多次重试后仍失败（{last}）")

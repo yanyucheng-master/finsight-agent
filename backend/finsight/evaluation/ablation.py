@@ -27,6 +27,8 @@ import json
 import math
 import os
 import random
+import re
+import shutil
 import threading
 import time
 from collections.abc import Callable, Sequence
@@ -41,7 +43,7 @@ from finsight.domain import Evidence, fmt_value
 from finsight.llm import gateway as gw
 from finsight.llm.gateway import LLMClient, LLMError, UsageMeter
 from finsight.reporting.report import generate_report
-from finsight.reporting.verifier import Claim, verify
+from finsight.reporting.verifier import CITE_RE, Claim, verify
 from finsight.samples import SampleError, refs_from_mapping, split_note
 
 GROUP_LABEL = {
@@ -50,6 +52,8 @@ GROUP_LABEL = {
     "C": "C 完整 FinSight（证据 + 核验器修订）",
 }
 PROBLEM = {"mismatch", "invalid_ref", "unverified"}
+# 打分口径版本：2 = 2026-11-03 起不再把股票代码 / 品牌数字（国窖1573）当数字；A 组新增归属期间分类；抽检表去引用标记、B/C 合并抽样
+SCORING_VERSION = 2
 # 评测样本：scripts/demo_symbols.txt 中除银行（金融企业不套用工商业指标）外的 9 家
 DEFAULT_CODES = ["600519", "000858", "000568", "000651", "300750", "000002", "600518", "002450", "002069"]
 
@@ -115,6 +119,9 @@ def rec_problem(rec: dict[str, Any]) -> tuple[str, str] | None:
         return "degraded", "完整流程降级为模板：" + "；".join(c.get("warnings", []))[:150]
     if c.get("truncated"):  # 最终采用的正文来自被截断的回复（被截断的修订稿不会被采用）
         return "c_truncated", "C 组输出达到长度上限被截断，内容可能不完整"
+    err = c.get("revision_error") or next((w for w in c.get("warnings", []) if w.startswith("修订请求失败")), "")
+    if "费用保护" in (err or ""):  # 修订请求被预算保护拒绝：终稿其实是未修订的初稿，C 组没有走完完整流程 → 不计入，并让调用方停止后续公司
+        return "budget_stopped", "修订请求被费用保护拒绝，保留了未经修订的初稿，C 组不是完整流程的终稿：" + str(err)[:150]
     if c.get("revised") and c.get("draft_truncated"):  # 终稿完整，但 B 组取的初稿被截断：B 少写的内容会让 B 显得问题更少
         return "b_truncated", "B 组初稿达到长度上限被截断（终稿是完整的修订稿），B、C 配对比较不成立"
     return None
@@ -151,6 +158,79 @@ def run_company(diag: DiagnosisResult, llm: LLMClient, *, model: str, a_done: di
         rep = generate_report(diag, llm=llm, mode="llm")
     return {"code": code, "name": name, "period": period, "model": model, "started": a.get("at", _now()),
             "A": a, "C": rep.model_dump(mode="json")}
+
+
+def reserve_bounds(diag: DiagnosisResult, llm: LLMClient) -> dict[str, float]:
+    """不发送任何请求，按真实提示词估算这家公司各类请求的费用占用上界（元）。
+    revision 的输入含初稿（最坏按 max_tokens × 3 字节）和修订提示（约 2500 字节），是估计值。"""
+    from finsight.llm.gateway import reserve_upper_bound
+    from finsight.reporting.report import SYSTEM_PROMPT, _user_prompt, build_context
+
+    model = llm.settings.model  # type: ignore[attr-defined]
+    max_tokens = int(llm.settings.max_tokens)  # type: ignore[attr-defined]
+    a_msgs = [{"role": "system", "content": PURE_SYSTEM},
+              {"role": "user", "content": pure_prompt(diag.profile.name, diag.profile.code, diag.periods[0].end[:4])}]
+    c_msgs = [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": _user_prompt(build_context(diag))}]
+    rev_msgs = c_msgs + [{"role": "assistant", "content": "字" * max_tokens}, {"role": "user", "content": "x" * 2500}]
+    b = llm.build_payload  # type: ignore[attr-defined]
+    return {"A": reserve_upper_bound(model, b(a_msgs)), "C": reserve_upper_bound(model, b(c_msgs)),
+            "C_revision": reserve_upper_bound(model, b(rev_msgs))}
+
+
+def c_state(c: dict[str, Any]) -> str:
+    """C 组记录的实际状态（按核验结果，不凭是否发生过修订猜）：是否修订、修订失败、终稿 / 初稿是否仍有问题。"""
+    v = c.get("verification") or {}
+    problems = sum(int(v.get(k, 0) or 0) for k in ("mismatch", "invalid_ref", "unverified"))
+    flags = len(v.get("compliance_flags") or []) + len(v.get("consistency_flags") or [])
+    open_issues = problems + flags
+    failed = [w for w in c.get("warnings", []) if w.startswith("修订")]
+    if c.get("revised"):
+        head, which = "C 组经过修订", "终稿"
+    elif failed:
+        head, which = "修订未完成（" + failed[0][:80] + "），保留初稿", "初稿"
+    else:
+        head, which = "未修订", "初稿"
+    tail = f"{which}通过核验" if not open_issues else f"{which}仍有 {problems} 个问题数字、{flags} 条口径 / 合规提示未通过"
+    return f"{head}；{tail}"
+
+
+def company_overview(codes: Sequence[str], out_dir: Path) -> list[dict[str, Any]]:
+    """每家公司的结果、失败原因和估算费用（费用取自 ledger.jsonl：已结算按实际，未结算按占用上界）。"""
+    led = read_ledger(out_dir)
+    last = {str(a.get("code")): a for a in led["attempts"]}
+    rows = []
+    for code in codes:
+        cost = led["by_code"].get(code, {})
+        row: dict[str, Any] = {"code": code, "status": "not_started", "note": "", "cost_cny_est": cost.get("cost", 0.0),
+                               "requests": cost.get("requests", 0), "unsettled": cost.get("unsettled", 0)}
+        done, failed = out_dir / "companies" / f"{code}.json", out_dir / "failed" / f"{code}.json"
+        try:
+            if done.exists():
+                rec = json.loads(done.read_text(encoding="utf-8"))
+                c = rec["C"]
+                row.update(status="done", name=rec.get("name", ""), note=c_state(c))
+            elif failed.exists():
+                rec = json.loads(failed.read_text(encoding="utf-8"))
+                bad = rec_problem(rec) if "C" in rec else None
+                row.update(status=(last.get(code) or {}).get("status") or (bad[0] if bad else "failed"),
+                           note=rec.get("reason") or (bad[1] if bad else ""))
+            elif code in last:
+                row.update(status=last[code].get("status", "unknown"), note=str(last[code].get("detail", "")))
+        except (OSError, ValueError, KeyError) as exc:
+            row.update(status="unreadable", note=f"结果文件读不出来：{exc}")
+        rows.append(row)
+    return rows
+
+
+def overview_markdown(rows: Sequence[dict[str, Any]], *, total: float, budget: float, model: str, unsettled: int) -> str:
+    done = sum(1 for r in rows if r["status"] == "done")
+    lines = [f"# 评测②运行概览（{model}）", "",
+             f"完成 {done} / {len(rows)} 家；本目录累计估算花费 {total:.3f} 元（预算上限 {budget:.2f} 元；客户端估算，"
+             f"未结算请求按占用上界计；以服务商控制台为准）。账本中有 {unsettled} 笔未结算请求。", "",
+             "| 公司 | 状态 | 请求数 | 估算花费(元) | 说明 |", "|---|---|---|---|---|"]
+    for r in rows:
+        lines.append(f"| {r['code']} {r.get('name', '')} | {r['status']} | {r['requests']} | {r['cost_cny_est']:.3f} | {r['note']} |")
+    return "\n".join(lines) + "\n"
 
 
 def _atomic_write(path: Path, text: str) -> None:
@@ -273,11 +353,22 @@ def read_ledger(out_dir: Path) -> dict[str, Any]:
     open_ = [r for i, r in reserves.items() if i not in settles]
     unsettled = sum(float(r["reserved"]) for r in open_)
     last = len(lines) - 1
-    return {"note": "费用为客户端估算（按返回用量 / 价格表；响应不明或未结算的请求按占用上界计），不是服务商账单；以服务商控制台为准",
+    by_code: dict[str, dict[str, Any]] = {}  # 每家公司的估算花费（已结算按实际，未结算按占用上界）
+    for rid, r in reserves.items():
+        c = by_code.setdefault(str(r.get("code") or "?"), {"cost": 0.0, "requests": 0, "unsettled": 0})
+        c["requests"] += 1
+        if rid in settles:
+            c["cost"] += float(settles[rid]["charged"])
+        else:
+            c["cost"] += float(r["reserved"])
+            c["unsettled"] += 1
+    for c in by_code.values():
+        c["cost"] = round(c["cost"], 6)
+    return {"note": "费用为客户端估算（按返回用量 / 公开标价，单价不含适用税费；响应不明、非 200 且不能确定未计费的请求、未结算的请求按占用上界计），不是服务商账单；以服务商控制台为准",
             "total_cost_cny_est": round(settled + unsettled, 6), "settled_cny": round(settled, 6),
             "unsettled_cny": round(unsettled, 6), "unsettled_requests": [{"id": r["id"], "code": r.get("code"), "stage": r.get("stage"),
                                                                        "reserved": r["reserved"], "at": r.get("at")} for r in open_],
-            "requests": len(reserves), "attempts": companies,
+            "requests": len(reserves), "attempts": companies, "by_code": by_code,
             "corrupt": any(not (torn_tail and i == last) for i in bad), "bad_lines": len(bad)}
 
 
@@ -469,6 +560,30 @@ def _stats(v) -> dict[str, int]:
             "flags": len(v.consistency_flags) + len(v.compliance_flags)}
 
 
+def period_split(claims: Sequence[Claim], refs: dict[str, Evidence], report_year: str) -> dict[str, int]:
+    """A 组“有归属”的数字（数值与证据库里某个值一致）匹配的是哪一期的证据。核验器匹配数值时不看期间：
+    模型凭记忆写出的上一年数字也会“有归属”。分四类：
+    current        匹配到报告期（最新一期）的证据；
+    prior_stated   匹配到往期证据，且所在句子写明了该往期年份（如“2024年末货币资金”）——期间标注自洽；
+    prior_conflict 匹配到往期证据，所在句子却只写了报告期年份——很可能是把往年数字标成了报告期；
+    prior_unstated 匹配到往期证据，句子里没有任何年份（表格单元格居多）——无法判断，须人工看表头。"""
+    out = {"current": 0, "prior_stated": 0, "prior_conflict": 0, "prior_unstated": 0}
+    for c in claims:
+        if c.status != "unattributed" or not c.evidence_id:
+            continue
+        ev = next((e for e in refs.values() if e.id == c.evidence_id), None)
+        year = (ev.period or "")[:4] if ev else ""
+        if not year or year == report_year:
+            out["current"] += 1
+        elif year in c.sentence:
+            out["prior_stated"] += 1
+        elif report_year in c.sentence:
+            out["prior_conflict"] += 1
+        else:
+            out["prior_unstated"] += 1
+    return out
+
+
 def group_texts(rec: dict[str, Any], diag: DiagnosisResult) -> dict[str, tuple[str, dict[str, Evidence]]]:
     """按组取出“文本 + 核验用证据池”。C 组降级为模板（模型失败）时没有 B/C（无效记录通常已被 rec_problem 排除）。"""
     out = {"A": (rec["A"]["text"], _all_refs(diag))}
@@ -485,7 +600,10 @@ def score_company(rec: dict[str, Any], diag: DiagnosisResult) -> dict[str, Any]:
     """给一条**有效**记录（rec_problem 为 None）打分。"""
     res: dict[str, Any] = {"code": rec["code"], "name": rec["name"]}
     for g, (text, refs) in group_texts(rec, diag).items():
-        res[g] = _stats(verify(text, refs))
+        v = verify(text, refs)
+        res[g] = _stats(v)
+        if g == "A":
+            res[g]["period"] = period_split(v.claims, refs, str(rec["period"])[:4])
     res["A"]["cost_cny"] = rec["A"]["usage"].get("cost_cny_est", 0.0)
     res["A"]["elapsed_s"] = rec["A"]["elapsed_ms"] / 1000
     res["C"]["cost_cny"] = rec["C"]["usage"].get("cost_cny_est", 0.0)
@@ -510,7 +628,11 @@ def summarize(scores: Sequence[dict[str, Any]], excluded: Sequence[dict[str, str
             "mean_cost_cny": round(sum(r.get("cost_cny", 0.0) for r in rows) / len(rows), 3) if rows and g != "B" else None,
             "mean_elapsed_s": round(sum(r.get("elapsed_s", 0.0) for r in rows) / len(rows), 1) if rows and g != "B" else None,
         }
+    a_period = {k: sum(s["A"].get("period", {}).get(k, 0) for s in scores if "A" in s)
+                for k in ("current", "prior_stated", "prior_conflict", "prior_unstated")}
     return {"groups": groups, "companies": len(scores), "excluded": list(excluded),
+            "a_period": a_period,
+            "a_no_figures": [s["code"] for s in scores if s.get("A", {}).get("total", 0) == 0],  # A 组没写出任何可核验数字（如拒绝作答）
             "revised_reports": sum(1 for s in scores if s["C"]["revised"]),
             "revision_failed_reports": sum(1 for s in scores if s["C"]["revision_failed"])}
 
@@ -549,43 +671,114 @@ def candidates(claim: Claim, diag: DiagnosisResult, k: int = 3) -> list[Evidence
     return [t[3] for t in ranked[:k]]
 
 
-def build_audit(records: Sequence[dict[str, Any]], diags: dict[str, DiagnosisResult], *, per_group: int = 15,
-                seed: int = 20261031) -> tuple[list[dict[str, str]], dict[str, dict[str, Any]]]:
-    """每组随机抽 per_group 个数字，打乱后编号；表里不出现组别（盲审），组别与核验器结论存在 key 里。
+def clean_sentence(sentence: str) -> str:
+    """抽检表里展示的句子：去掉 [E12] 引用标记和“未核验”标注。B/C 的句子带引用而 A 没有，带着标记就等于告诉审核人组别
+    （2026-11-02 复核发现 45 行里 30 行带 [E..]，盲审形同虚设）。仍可能有写作风格上的差异，无法做到绝对盲审。"""
+    t = CITE_RE.sub("", sentence).replace("⚠️〔未核验〕", "")
+    return re.sub(r"\s+", " ", t.replace("\n", " ")).strip()
 
-    B 是 C 的初稿，两组的数字大部分完全相同：同一家公司、同一句子里的同一个数字只让人判一次，
-    它同时计入 B 和 C（key 里 groups = ["B", "C"]），避免重复劳动，也避免同一个数字被判出两种结果。"""
+
+def _auditable(claims: Sequence[Claim], refs: dict[str, Evidence]) -> list[Claim]:
+    """能让人判对错的“公司事实数字”：排除比较基准、系统阈值 / 满分等标尺数字（引用的是 param 证据，如 Z 值 1.10、
+    F-Score 满分 9），同一家公司的同一个数字文本只留一个（同一数字重复出现不应被重复抽中）。"""
+    out, seen = [], set()
+    by_id = {e.id: e for e in refs.values()}  # Claim.evidence_id 是证据自身的 id，refs 的键是引用编号 E#
+    for c in claims:
+        if c.status == "benchmark":
+            continue
+        ev = by_id.get(c.evidence_id) if c.evidence_id else None
+        if ev is not None and ev.kind == "param":
+            continue
+        key = (c.text, c.unit)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(c)
+    return out
+
+
+def _stratified(pool: Sequence[tuple[dict[str, Any], Claim]], n: int, rng: random.Random) -> list[tuple[dict[str, Any], Claim]]:
+    """按公司分层抽样：各公司轮流抽一个，直到够 n 个或池抽空。避免数字多的公司（如 47 个数字的康得退）占掉大半样本。"""
+    by_code: dict[str, list[tuple[dict[str, Any], Claim]]] = {}
+    for item in pool:
+        by_code.setdefault(item[0]["code"], []).append(item)
+    for lst in by_code.values():
+        rng.shuffle(lst)
+    order = sorted(by_code)
+    rng.shuffle(order)
+    picked: list[tuple[dict[str, Any], Claim]] = []
+    while len(picked) < n and any(by_code[c] for c in order):
+        for c in order:
+            if by_code[c] and len(picked) < n:
+                picked.append(by_code[c].pop())
+    return picked
+
+
+def build_audit(records: Sequence[dict[str, Any]], diags: dict[str, DiagnosisResult], *, per_group: int = 20,
+                seed: int = 20261031) -> tuple[list[dict[str, str]], dict[str, dict[str, Any]]]:
+    """抽检样本：打乱后编号；表里不出现组别（盲审），组别与核验器结论存在 key 里。
+
+    * A：从 A 组的数字里按公司分层抽 per_group 个。
+    * B/C：B 是 C 的初稿，没被修订时两组文本完全相同。同一家公司、同一句子里的同一个数字只让人判一次，同时计入 B 和 C
+      （key 里 groups = ["B", "C"]）：从“B、C 共有”的数字里按公司分层抽 per_group 个。B、C 各自抽一份会得到两组不同的
+      样本，却是同一份文本——两组人工错误率的差异只是抽样噪声，容易被误读成核验器的效果（2026-11-02 复核发现）。
+    * 只在 B 或只在 C 出现的数字（即修订改动过的）单独各抽至多 max(3, per_group // 4) 个，用来评估修订本身。
+    * 不抽比较基准和系统阈值 / 满分类标尺数字。"""
     rng = random.Random(seed)
-    picked: dict[tuple[str, str, str, str], dict[str, Any]] = {}
-    for g in ("A", "B", "C"):
-        pool = []
-        for rec in records:
-            diag = diags[rec["code"]]
-            texts = group_texts(rec, diag)
-            if g not in texts:
-                continue
-            text, refs = texts[g]
-            for c in verify(text, refs).claims:
-                if c.status != "benchmark":
-                    pool.append((rec, c))
-        for rec, c in rng.sample(pool, min(per_group, len(pool))):
-            ident = ("A" if g == "A" else "BC", rec["code"], c.sentence, c.text)  # A 的证据池不同，不与 B/C 合并
-            item = picked.setdefault(ident, {"rec": rec, "claim": c, "groups": []})
-            item["groups"].append(g)
-    items = list(picked.values())
+    pools: dict[str, list[tuple[dict[str, Any], Claim]]] = {"A": [], "BC": [], "B": [], "C": []}
+    ident = lambda rec, c: (rec["code"], clean_sentence(c.sentence), c.text)  # noqa: E731
+    for rec in records:
+        diag = diags[rec["code"]]
+        texts = group_texts(rec, diag)
+        text, refs = texts["A"]
+        pools["A"] += [(rec, c) for c in _auditable(verify(text, refs).claims, refs)]
+        if "B" not in texts or "C" not in texts:
+            continue
+        (bt, brefs), (ct, crefs) = texts["B"], texts["C"]
+        bcl = _auditable(verify(bt, brefs).claims, brefs)
+        ccl = _auditable(verify(ct, crefs).claims, crefs)
+        b_ids, c_ids = {ident(rec, c) for c in bcl}, {ident(rec, c) for c in ccl}
+        pools["BC"] += [(rec, c) for c in ccl if ident(rec, c) in b_ids]
+        pools["B"] += [(rec, c) for c in bcl if ident(rec, c) not in c_ids]
+        pools["C"] += [(rec, c) for c in ccl if ident(rec, c) not in b_ids]
+    quota = {"A": per_group, "BC": per_group, "B": max(3, per_group // 4), "C": max(3, per_group // 4)}
+    groups_of = {"A": ["A"], "BC": ["B", "C"], "B": ["B"], "C": ["C"]}
+    items = []
+    for pool_name in ("A", "BC", "B", "C"):
+        for rec, c in _stratified(pools[pool_name], quota[pool_name], rng):
+            items.append({"rec": rec, "claim": c, "groups": groups_of[pool_name]})
     rng.shuffle(items)
     rows, key = [], {}
     for i, it in enumerate(items, 1):
         sid, rec, c = f"S{i:03d}", it["rec"], it["claim"]
         cands = candidates(c, diags[rec["code"]])
         rows.append({"编号": sid, "公司": f"{rec['name']}（{rec['code']}）", "报告期": rec["period"][:4] + "年",
-                     "所在句子": c.sentence.replace("\n", " ")[:200], "待判断的数字": c.text,
+                     "所在句子": clean_sentence(c.sentence)[:200], "待判断的数字": c.text,
                      "对照证据（系统找的最接近几条，仅供参考；请以原始财报为准）":
                          "；".join(f"{e.label}［{e.period or '—'}］= {fmt_value(e.value, e.unit)}（{e.id}）" for e in cands) or "（没有同单位的证据）",
                      "判定（填：对 / 错 / 不确定）": "", "备注": ""})
         key[sid] = {"groups": it["groups"], "code": rec["code"], "number": c.text, "sentence": c.sentence,
                     "verifier_status": c.status}
     return rows, key
+
+
+def sheet_has_judgements(sheet: Path) -> bool:
+    if not sheet.exists():
+        return False
+    with sheet.open(encoding="utf-8-sig", newline="") as f:
+        return any((row.get("判定（填：对 / 错 / 不确定）") or "").strip() for row in csv.DictReader(f))
+
+
+def archive_files(out_dir: Path, names: Sequence[str]) -> str:
+    """把旧的派生文件复制 / 改名成 xxx.vN.ext 留档（N 取尚未用过的最小值），返回版本标签。"""
+    n = 1
+    while any((out_dir / f"{Path(x).stem}.v{n}{Path(x).suffix}").exists() for x in names):
+        n += 1
+    for x in names:
+        src = out_dir / x
+        if src.exists():
+            shutil.copy2(src, out_dir / f"{Path(x).stem}.v{n}{Path(x).suffix}")
+    return f"v{n}"
 
 
 def write_audit(rows: list[dict[str, str]], key: dict[str, Any], out_dir: Path) -> tuple[Path, Path]:
@@ -671,12 +864,32 @@ def to_markdown(summary: dict[str, Any], audit: dict[str, Any] | None, meta: dic
               f"无效、未纳入统计的公司：{excl}。", "",
               "说明：A 组没有引用，“问题数字”指在该公司全部证据里找不到可信归属的数字，可能是编造，也可能是证据库之外的真实数字；"
               "B/C 组指不一致 / 引用无效 / 无证据。核验器统计自己的输出会有循环论证，因此下面用人工抽检校验。", ""]
+    ap = summary.get("a_period") or {}
+    if sum(ap.values()):
+        n_attr = sum(ap.values())
+        lines += ["### A 组“有归属”的数字匹配的是哪一期", "",
+                  f"A 组有 {n_attr} 个数字能在证据库里找到数值一致的证据（即不算“问题数字”）。核验器匹配数值时不看期间，所以这不等于“对”："
+                  f"匹配到报告期证据 {ap['current']} 个；匹配到往期证据 {n_attr - ap['current']} 个"
+                  f"（其中句子写明往期年份 {ap['prior_stated']}、句子只写了报告期年份 {ap['prior_conflict']}、句子里没有年份 {ap['prior_unstated']}）。"
+                  "“只写了报告期年份”的很可能是把往年数字标成了报告期；“没有年份”的（多为表格）须人工看表头。", ""]
+    nf = summary.get("a_no_figures") or []
+    if nf:
+        lines += [f"A 组没有写出任何可核验数字的公司：{'、'.join(nf)}（例如拒绝作答并标注“待核实”）。这类简报不应被理解为“零错误输出”，"
+                  "也不是在数字准确性上赢了；它们已计入“简报数”，但不产生问题数字。", ""]
+    led = meta.get("ledger")
+    if led and summary["companies"]:
+        lines += [f"成本说明：上表“平均成本”只含写入结果的请求。账本合计估算 {led['total_cost_cny_est']} 元（{led['requests']} 次请求，"
+                  f"含失败请求的保守预留，不含税），折合每家 {led['total_cost_cny_est'] / summary['companies']:.3f} 元；以服务商控制台账单为准。", ""]
+    if meta.get("scoring_version", 1) >= 2:
+        lines += [f"口径版本 v{meta['scoring_version']}（2026-11-03）：不再把股票代码、品牌名里的数字（如“国窖1573”）当成数字断言；"
+                  "A 组新增“归属期间”分类；抽检表去掉引用标记，B/C 合并抽样、按公司分层、不抽阈值 / 满分类标尺数字。"
+                  + (f"{meta['regen_note']}。" if meta.get("regen_note") else ""), ""]
     if audit is None:
         lines += ["## 人工抽检", "", "尚未提供填好的抽检表（`audit_sheet.csv`）。填完后运行 "
                   "`finsight eval ablation-score <目录> --audit <填好的csv>` 生成本节。", ""]
     else:
         lines += ["## 人工抽检（独立口径）", "", f"已判定 {audit['filled']} 个数字；“不确定 / 空”不计入错误率；"
-                  "B、C 中完全相同的数字只判一次，同时计入两组。", "",
+                  "B、C 中完全相同的数字只判一次，同时计入两组（B 未被修订时两组文本相同，样本也相同，两组错误率之差不含信息）。", "",
                   "| 组 | 抽样数 | 已判定 | 判错 | 人工错误率 | 95% 区间（Wilson） |", "|---|---|---|---|---|---|"]
         for k in ("A", "B", "C"):
             a = audit["groups"][k]
@@ -689,8 +902,12 @@ def to_markdown(summary: dict[str, Any], audit: dict[str, Any] | None, meta: dic
                   f"查准率 {_pct(v['precision'])}，查全率 {_pct(v['recall'])}。", ""]
     lines += ["## 局限", "", "* 样本很小（单次生成、少数公司），只能说明这批样本上的观察，不是统计显著的普遍规律。",
               "* 核验器只比较数值：A 组里“有归属”的数字只表示它与证据库中某个数值相近，不保证指标对得上"
-              "（例如虚构的 12.34% 恰好与某个无关的增速一致），所以 A 组的问题数字率是下限，真实错误率以人工抽检为准。",
-              "* 人工抽检对照的是系统找出的最接近证据，仍须以原始财报为准；无法确认的判“不确定”。",
+              "（例如虚构的 12.34% 恰好与某个无关的增速一致）；无归属也可能只是证据库缺漏，因此问题数字率不是实际错误率的上下界，"
+              "真实错误情况仍须对照原始财报抽检。",
+              "* 人工抽检对照的是系统找出的最接近证据，仍须以原始财报为准；无法确认的判“不确定”。抽检表已去掉引用标记，"
+              "但 A 与 B/C 的行文风格仍有差别，无法做到绝对盲审；每组只抽约 20 个数字，区间很宽。",
+              "* A 组被要求写报告期（最新财年）的数字，而模型的训练数据可能不含该年报（该模型的训练截止期未核实）。"
+              "这可能影响结果，但本实验没有确定原因；问题数字率不能直接等同于“爱编数字”，也不是模型能力的普遍结论。",
               "* A 与 B/C 的提示词、证据和规则都不同（见上），这是实验设计的一部分；换模型或提示词结果会不同。",
               "* A 为空或被截断、C 降级为模板或被截断的公司不计入统计，并在上面列出。", ""]
     return "\n".join(lines)
@@ -701,10 +918,12 @@ def load_records(out_dir: Path) -> list[dict[str, Any]]:
 
 
 def score_dir(out_dir: Path, diag_of: Callable[[str], DiagnosisResult], *, audit_file: Path | None = None,
-              per_group: int = 15, make_audit: bool = True) -> dict[str, Any]:
+              per_group: int = 20, make_audit: bool = True, regen_audit: bool = False) -> dict[str, Any]:
     """从已保存的原始记录重新打分并写出报告 / 抽检表。不调用大模型，可反复运行。
 
-    make_audit=False 用于“还没跑完”的中途打分：抽检表一经生成就固定，不能在数据不全时生成。"""
+    make_audit=False 用于“还没跑完”的中途打分：抽检表一经生成就固定，不能在数据不全时生成。
+    regen_audit=True：用新口径重新生成抽检表（旧表、旧 key、旧报告留档为 *.vN.*）。只允许在旧抽检表还没人填过时使用，
+    否则会让已填的判定对不上，直接拒绝。"""
     loaded = load_records(out_dir)
     records, excluded = [], []
     for r in loaded:
@@ -720,6 +939,10 @@ def score_dir(out_dir: Path, diag_of: Callable[[str], DiagnosisResult], *, audit
     summary = summarize(scores, excluded)
     keyfile = out_dir / "audit_key.json"
     audit = None
+    regen_note = ""
+    if audit_file is None and make_audit and (regen_audit or not keyfile.exists()) and sheet_has_judgements(out_dir / "audit_sheet.csv"):
+        raise SampleError("audit_sheet.csv 里已经有人工判定，拒绝重新生成抽检表（会让已填的判定对不上）；"
+                          "请先保留原表并恢复配套的 audit_key.json，或另存后确认作废再手动移走两者")
     if audit_file is not None:
         if not keyfile.exists():
             raise SampleError("缺少 audit_key.json：先不带 --audit 运行一次生成抽检表")
@@ -727,12 +950,22 @@ def score_dir(out_dir: Path, diag_of: Callable[[str], DiagnosisResult], *, audit
     elif make_audit and not keyfile.exists():  # 抽检表只生成一次：重复打分不能换样本，否则已填的判定对不上
         rows, key = build_audit(records, diags, per_group=per_group)
         write_audit(rows, key, out_dir)
+    elif make_audit and regen_audit:
+        tag = archive_files(out_dir, ["audit_sheet.csv", "audit_key.json", "ablation.json", "ablation_report.md"])
+        rows, key = build_audit(records, diags, per_group=per_group)
+        write_audit(rows, key, out_dir)
+        regen_note = f"旧口径的抽检表 / key / 报告已留档为 *.{tag}.*"
     from finsight.reporting.report import SYSTEM_PROMPT
 
     meta = {"model": records[0].get("model"), "generated": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
             "prompts": {"A_system": PURE_SYSTEM, "A_user_example": pure_prompt("（公司名）", "（代码）", "（年份）"),
                         "C_system_sha256": hashlib.sha256(SYSTEM_PROMPT.encode("utf-8")).hexdigest()[:16],
-                        "note": "B/C 的系统提示、证据清单与规则见 reporting/report.py；A 与 B/C 的提示词不同，是实验干预的一部分"}}
+                        "note": "B/C 的系统提示、证据清单与规则见 reporting/report.py；A 与 B/C 的提示词不同，是实验干预的一部分"},
+            "scoring_version": SCORING_VERSION, "regen_note": regen_note}
+    if (out_dir / "ledger.jsonl").exists():  # 平均成本只含成功写入记录的请求；账本合计还含失败请求的保守预留
+        led = read_ledger(out_dir)
+        meta["ledger"] = {"total_cost_cny_est": led["total_cost_cny_est"], "requests": led["requests"],
+                          "by_code": {k: v["cost"] for k, v in led["by_code"].items()}}
     (out_dir / "ablation.json").write_text(json.dumps({"meta": meta, "summary": summary, "per_company": scores,
                                                        "audit": audit}, ensure_ascii=False, indent=1), encoding="utf-8")
     (out_dir / "ablation_report.md").write_text(to_markdown(summary, audit, meta), encoding="utf-8")

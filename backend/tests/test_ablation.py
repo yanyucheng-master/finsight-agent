@@ -214,7 +214,7 @@ def test_run_all_saves_results_and_resumes_without_new_requests(diag, tmp_path):
 
 
 def test_every_request_is_journaled_before_sending_and_failures_are_charged(diag, tmp_path, guard):
-    """A 成功后 C 的各次尝试都 HTTP 500（服务端拒绝，不计费）：账本 = A 的真实用量；每次发送都有记录。"""
+    """A 成功后 C 的各次尝试都 HTTP 500：官方没有说明 5xx 是否计费，不能当作没有收费 → 每次按占用上界记账；每次发送都有记录。"""
     out, seen = tmp_path / "ab", []
 
     def handler(request):
@@ -228,7 +228,9 @@ def test_every_request_is_journaled_before_sending_and_failures_are_charged(diag
     led = ablation.read_ledger(out)
     assert led["requests"] == 5 and not led["unsettled_requests"] and not led["corrupt"]
     a_cost = gw.estimate_cost_cny("kimi-k3.1-pro", {"prompt_tokens": 2000, "completion_tokens": 1500})
-    assert led["total_cost_cny_est"] == pytest.approx(a_cost) == pytest.approx(guard.spent)
+    assert led["total_cost_cny_est"] == pytest.approx(guard.spent) and led["total_cost_cny_est"] > 4 * 0.3 + a_cost  # 4 次 5xx 各按上界
+    settles = [json.loads(x) for x in (out / "ledger.jsonl").read_text("utf-8").splitlines() if json.loads(x)["ev"] == "settle"]
+    assert [x["exact"] for x in settles] == [True, False, False, False, False]  # 5xx 的结算不是精确值
     stages = [json.loads(line).get("stage") for line in (out / "ledger.jsonl").read_text("utf-8").splitlines()
               if json.loads(line)["ev"] == "reserve"]
     assert stages == ["A", "C", "C", "C", "C"]
@@ -694,3 +696,396 @@ def test_score_dir_excludes_record_with_truncated_draft(diag, tmp_path):
     r = ablation.score_dir(out, diag_of_factory(diag), make_audit=False)
     assert r["summary"]["companies"] == 1 and [e["code"] for e in r["summary"]["excluded"]] == ["000858"]
     assert "初稿" in r["summary"]["excluded"][0]["reason"]
+
+
+# ------------------------------------------------------------------ 第四轮：授权额度 6 元下的安全启动（离线模拟，没有任何真实请求）
+
+KIMI = LLMSettings(provider="kimi", base_url="https://llm.test/v1", api_key="sk-test", model="kimi-k3.1-pro",
+                   reasoning_effort="low", max_tokens=8192)
+
+
+def _forbid_requests(monkeypatch):
+    def boom(self, *a, **k):
+        raise AssertionError("不应发送任何请求")
+
+    monkeypatch.setattr(OpenAICompatibleClient, "chat", boom)
+
+
+def _cli_args(out, *extra):
+    return ["eval", "ablation", "--provider", "kimi", "--codes", "600519", "--out", str(out), "--workers", "1", *extra]
+
+
+def test_cli_dry_run_sends_nothing_and_writes_no_ledger(diag, tmp_path, monkeypatch, capsys):
+    _forbid_requests(monkeypatch)
+    monkeypatch.setattr("finsight.config.llm_settings", lambda provider=None: KIMI)
+    out = tmp_path / "ab"
+    assert cli_main(_cli_args(out, "--budget", "5", "--require-model", "kimi-k3.1-pro", "--dry-run")) == 0
+    text = capsys.readouterr().out
+    assert "单次占用参考估计" in text and "没有发送任何请求" in text and "上限 5.0 元" in text and "单次输出上限 8192" in text
+    assert "不是数学上界" in text and "上界合计" not in text  # 不能把固定假设的估计说成上界
+    assert not (out / "ledger.jsonl").exists() and not (out / "run.lock").exists()
+
+
+def test_dry_run_works_without_api_key(diag, tmp_path, monkeypatch, capsys):
+    _forbid_requests(monkeypatch)
+    monkeypatch.setattr("finsight.config.llm_settings", lambda provider=None: LLMSettings(**{**KIMI.__dict__, "api_key": ""}))
+    assert cli_main(_cli_args(tmp_path / "ab", "--dry-run")) == 0
+    assert "单次占用参考估计" in capsys.readouterr().out
+
+
+def test_require_model_blocks_any_other_model(diag, tmp_path, monkeypatch, capsys):
+    _forbid_requests(monkeypatch)
+    monkeypatch.setattr("finsight.config.llm_settings",
+                        lambda provider=None: LLMSettings(**{**KIMI.__dict__, "model": "kimi-k3"}))
+    assert cli_main(_cli_args(tmp_path / "ab", "--require-model", "kimi-k3.1-pro")) == 1
+    assert "模型不符" in capsys.readouterr().out and not (tmp_path / "ab" / "ledger.jsonl").exists()
+
+
+def test_cli_forces_max_tokens_and_retries_and_records_every_attempt(diag, tmp_path, monkeypatch, guard):
+    """--max-tokens 覆盖 .env；--retries 1 时 C 组每个失败请求最多发 2 次，每次发送都单独记账。"""
+    monkeypatch.setenv("LLM_MAX_TOKENS", "32768")  # 模拟 .env 里的大值
+    monkeypatch.setattr("finsight.config.llm_settings", lambda provider=None: LLMSettings(**{**KIMI.__dict__, "max_tokens": 32768}))
+    seen = []
+
+    def handler(request):
+        body = json.loads(request.content)
+        seen.append((body["model"], body["max_tokens"], _is_a(request)))
+        return _chat_ok(A_TEXT) if _is_a(request) else httpx.Response(500, text="boom")
+
+    monkeypatch.setattr("finsight.llm.gateway.make_client",
+                        lambda cfg: OpenAICompatibleClient(cfg, transport=httpx.MockTransport(handler), backoff_s=0))
+    out = tmp_path / "ab"
+    rc = cli_main(_cli_args(out, "--budget", "5", "--require-model", "kimi-k3.1-pro", "--max-tokens", "8192", "--retries", "1"))
+    assert rc in (1, 2)  # C 全部失败 → 降级，不计入评测
+    assert {m for m, _, _ in seen} == {"kimi-k3.1-pro"} and {t for _, t, _ in seen} == {8192}
+    assert [a for _, _, a in seen] == [True, False, False]  # A 一次 + C 两次（1 次重试）
+    led = ablation.read_ledger(out)
+    assert led["requests"] == 3 and not led["unsettled_requests"] and led["by_code"]["600519"]["requests"] == 3
+    assert (out / "run_overview.md").exists()
+    assert "degraded" in (out / "run_overview.md").read_text(encoding="utf-8")
+
+
+def test_ask_requires_typing_yes(diag, tmp_path, monkeypatch, capsys):
+    _forbid_requests(monkeypatch)
+    monkeypatch.setattr("finsight.config.llm_settings", lambda provider=None: KIMI)
+    for answer in ("no", "yes", ""):
+        monkeypatch.setattr("builtins.input", lambda prompt="", a=answer: a)
+        assert cli_main(_cli_args(tmp_path / "ab", "--ask")) == 1
+        assert "已取消" in capsys.readouterr().out
+    assert not (tmp_path / "ab" / "ledger.jsonl").exists()
+
+
+def test_ask_yes_runs_and_reports_per_company(diag, tmp_path, monkeypatch, capsys, guard):
+    draft, fixed = _drafts(diag)
+    monkeypatch.setattr("finsight.config.llm_settings", lambda provider=None: KIMI)
+    monkeypatch.setattr("builtins.input", lambda prompt="": "YES")
+
+    def handler(request):
+        if _is_a(request):
+            return _chat_ok(A_TEXT)
+        return _chat_ok(fixed if "核验器发现以下问题" in request.content.decode("utf-8") else draft)
+
+    monkeypatch.setattr("finsight.llm.gateway.make_client",
+                        lambda cfg: OpenAICompatibleClient(cfg, transport=httpx.MockTransport(handler), backoff_s=0))
+    out = tmp_path / "ab"
+    assert cli_main(_cli_args(out, "--budget", "5", "--ask")) == 0
+    text = capsys.readouterr().out
+    assert "完成 1 / 1 家" in text and "| 600519" in text and "C 组经过修订" in text
+    led = ablation.read_ledger(out)
+    assert led["by_code"]["600519"]["requests"] == 3 and led["by_code"]["600519"]["cost"] == pytest.approx(guard.spent)
+
+
+def test_six_yuan_authorization_is_never_exceeded_and_rerun_adds_no_budget(diag, tmp_path, monkeypatch, guard):
+    """按 Kimi 价格、max_tokens 8192、累计上限 5 元模拟 9 家：每次发送之前，账本里“已结算实际 + 未结算占用上界”都 ≤ 5；
+    触发保护后停止新公司；再次运行同一目录不会增加额度。"""
+    draft, fixed = _drafts(diag)
+    out, cap = tmp_path / "ab", 5.0
+    codes = ["600519", "000858", "000568", "000651", "300750", "000002", "600518", "002450", "002069"]
+    sent = []
+
+    def handler(request):
+        led = ablation.read_ledger(out)
+        sent.append(led["total_cost_cny_est"])
+        assert led["total_cost_cny_est"] <= cap + 1e-9, "发送时账本累计（含本次占用上界）已超过上限"
+        if _is_a(request):
+            return _chat_ok(A_TEXT, {"prompt_tokens": 600, "completion_tokens": 3500})
+        revising = "核验器发现以下问题" in request.content.decode("utf-8")
+        return _chat_ok(fixed if revising else draft,
+                        {"prompt_tokens": 21000 if revising else 14000, "completion_tokens": 6000 if revising else 7000})
+
+    llm = _real_client(handler)
+    res = ablation.run_all(codes, diag_of_factory(diag), llm, out, model="kimi-k3.1-pro", workers=1, budget=cap, log=lambda m: None)
+    outcomes = list(res["outcome"].values())
+    assert res["stopped_by_budget"] and 1 <= outcomes.count("done") < 9 and "not_started" in outcomes
+    led = ablation.read_ledger(out)
+    assert led["total_cost_cny_est"] <= cap and not led["corrupt"] and not led["unsettled_requests"]
+    assert led["total_cost_cny_est"] == pytest.approx(guard.spent)
+    assert max(sent) <= cap
+
+    # 再次运行（新的进程级保护）：额度按目录累计，不会因为重跑而增加；账本不会被清空
+    before = (out / "ledger.jsonl").read_text(encoding="utf-8")
+    monkeypatch.setattr(gw, "BUDGET", gw.BudgetGuard())
+    ablation.run_all(codes, diag_of_factory(diag), _real_client(handler), out, model="kimi-k3.1-pro", workers=1, budget=cap,
+                     log=lambda m: None)
+    assert (out / "ledger.jsonl").read_text(encoding="utf-8").startswith(before)  # 旧账本原样保留，只追加
+    assert ablation.read_ledger(out)["total_cost_cny_est"] <= cap
+    assert max(sent) <= cap
+
+
+def test_overview_reports_failure_reasons_and_unsettled_cost(diag, tmp_path, guard):
+    out = tmp_path / "ab"
+    _run(diag, MockLLM(script=[LLMResponse(content=A_TEXT, finish_reason="length")]), out)  # A 被截断 → a_invalid
+    rows = ablation.company_overview(["600519", "000858"], out)
+    assert rows[0]["status"] == "a_invalid" and "截断" in rows[0]["note"] and rows[1]["status"] == "not_started"
+
+
+# ------------------------------------------------------------------ 第五轮复核：预算停止 / dry-run 估计 / 计费保守假设
+
+def _budget_script(diag, third):
+    draft, _ = _drafts(diag)
+    n = {"n": 0}
+
+    def responder(messages, tools):
+        n["n"] += 1
+        if n["n"] == 1:
+            return A_TEXT
+        if n["n"] == 2:
+            return draft  # 含无证据数字，触发修订
+        raise LLMError(third)
+
+    return responder
+
+
+def test_revision_refused_by_budget_is_a_budget_stop_not_done(diag, tmp_path):
+    out = tmp_path / "ab"
+    llm = MockLLM(responder=_budget_script(diag, "费用保护：已估算花费 4.7 元，本次请求最多可能再花 1.1 元，将超过预算 5.00 元，已停止发送"))
+    res = ablation.run_all(["600519", "000858"], diag_of_factory(diag), llm, out, model="mock-llm", workers=1, log=lambda m: None)
+    assert res["stopped_by_budget"] and res["outcome"] == {"600519": "budget_stopped", "000858": "not_started"}
+    assert not (out / "companies" / "600519.json").exists() and (out / "failed" / "600519.json").exists()  # 不计入统计
+    assert (out / "partial" / "600519.json").exists()  # A 组保留，不重复付费
+    rec = json.loads((out / "failed" / "600519.json").read_text(encoding="utf-8"))
+    assert rec["C"]["revision_error"] and not rec["C"]["revised"]
+    kind, why = ablation.rec_problem(rec)
+    assert kind == "budget_stopped" and "未经修订的初稿" in why and "费用保护" in why
+    row = ablation.company_overview(["600519", "000858"], out)
+    assert row[0]["status"] == "budget_stopped" and "费用保护" in row[0]["note"] and row[1]["status"] == "not_started"
+    assert not ablation.company_overview(["600519"], out)[0]["note"].startswith("初稿即通过核验")
+    with pytest.raises(Exception, match="有效记录"):  # 即使文件被手工放进 companies/，打分也会排除它
+        (out / "companies").mkdir()
+        (out / "companies" / "600519.json").write_text(json.dumps(rec, ensure_ascii=False), encoding="utf-8")
+        ablation.score_dir(out, diag_of_factory(diag), make_audit=False)
+
+
+def test_ordinary_revision_failure_stays_valid_but_is_labelled_by_actual_verification(diag, tmp_path):
+    """非预算原因的修订失败：记录仍有效（C = 初稿，单独计数），但状态必须按实际核验结果写，不能说“初稿即通过核验”。"""
+    out = tmp_path / "ab"
+    llm = MockLLM(responder=_budget_script(diag, "模拟：网络错误"))
+    res = ablation.run_all(["600519"], diag_of_factory(diag), llm, out, model="mock-llm", workers=1, log=lambda m: None)
+    assert res["outcome"] == {"600519": "done"} and not res["stopped_by_budget"]
+    row = ablation.company_overview(["600519"], out)[0]
+    assert row["status"] == "done" and "修订未完成" in row["note"] and "仍有 1 个问题数字" in row["note"]
+    assert "初稿即通过核验" not in row["note"] and "通过核验" not in row["note"].replace("未通过", "")
+
+
+def test_overview_state_of_passed_unrevised_and_revised_records(diag, tmp_path):
+    draft, fixed = _drafts(diag)
+    ok = tmp_path / "ok"
+    _run(diag, MockLLM(script=[A_TEXT, fixed]), ok)
+    assert ablation.company_overview(["600519"], ok)[0]["note"] == "未修订；初稿通过核验"
+    rv = tmp_path / "rv"
+    _run(diag, MockLLM(script=[A_TEXT, draft, fixed]), rv)
+    assert ablation.company_overview(["600519"], rv)[0]["note"] == "C 组经过修订；终稿通过核验"
+
+
+def test_dry_run_estimate_is_not_an_upper_bound_but_real_reservation_uses_the_actual_payload(diag, monkeypatch):
+    """dry-run 的修订估算按固定假设；真实修订请求带着很长的 reasoning_content 时，真实预留更大，并且按实际 payload 拒绝发送。"""
+    from finsight.reporting.report import SYSTEM_PROMPT, _user_prompt, build_context
+
+    client = OpenAICompatibleClient(KIMI, transport=httpx.MockTransport(lambda r: _chat_ok("x")), backoff_s=0)
+    est = ablation.reserve_bounds(diag, client)["C_revision"]
+    msgs = [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": _user_prompt(build_context(diag))},
+            {"role": "assistant", "content": "初稿" * 500, "reasoning_content": "思考" * 30000},  # 真实推理内容远超假设
+            {"role": "user", "content": "核验器发现以下问题……" * 200}]
+    payload = client.build_payload(msgs)
+    actual = gw.reserve_upper_bound("kimi-k3.1-pro", payload)
+    assert actual > est * 1.3  # 估计确实可能低于真实预留 → 不能称为上界
+    monkeypatch.setenv("LLM_BUDGET_CNY", f"{est:.4f}")  # 额度只够“估计值”：真实请求按实际 payload 被拒绝
+    guard = gw.BudgetGuard()
+    with pytest.raises(LLMError, match="费用保护"):
+        guard.reserve("kimi-k3.1-pro", payload)
+    assert guard.pending == 0 and guard.spent == 0
+
+
+def test_non_200_other_than_definite_rejections_is_charged_at_upper_bound(monkeypatch):
+    """HTTP 429 / 5xx 不能证明没有计费 → 按占用上界；400 / 401 等推理前拒绝 → 0。"""
+    monkeypatch.setattr(gw, "BUDGET", gw.BudgetGuard())
+    monkeypatch.setenv("LLM_BUDGET_CNY", "20")
+    for status, charged in ((503, True), (429, True), (401, False)):
+        monkeypatch.setattr(gw, "BUDGET", gw.BudgetGuard())
+        client = OpenAICompatibleClient(KIMI, retries=0, backoff_s=0,
+                                        transport=httpx.MockTransport(lambda r, s=status: httpx.Response(s, text="x")))
+        with pytest.raises(LLMError):
+            client.chat([{"role": "user", "content": "你好"}])
+        assert (gw.BUDGET.spent > 0) is charged, status
+        if charged:
+            assert gw.BUDGET.spent == pytest.approx(8192 * 68 / 1e6, rel=0.05)  # 占用上界：max_tokens × 输出单价 + 很短的输入
+
+
+def test_usage_fields_conservative_estimate_and_missing_usage_charged_at_upper_bound(monkeypatch):
+    m = "kimi-k3.1-pro"
+    base = {"prompt_tokens": 1000, "completion_tokens": 2000}
+    c0 = gw.estimate_cost_cny(m, base)
+    assert c0 == pytest.approx((1000 * 13 + 2000 * 68) / 1e6)
+    assert gw.estimate_cost_cny(m, {**base, "cached_tokens": 400}) == pytest.approx((400 * 1.3 + 600 * 13 + 2000 * 68) / 1e6)
+    # total_tokens 比分项之和大：多出来的部分（可能是未计入 completion_tokens 的推理 token）按输出价计
+    assert gw.estimate_cost_cny(m, {**base, "total_tokens": 4500}) == pytest.approx((1000 * 13 + 3500 * 68) / 1e6)
+    # 推理 token 比 completion_tokens 还多 → 不可能是它的子集，视为额外产生
+    assert gw.estimate_cost_cny(m, {**base, "reasoning_tokens": 5000}) > c0 + 4000 * 68 / 1e6 - 1e-9
+    # 出现缓存写入字段：保守地再追加一份未命中价（按最贵的 1 小时档 = 2 倍）
+    assert gw.estimate_cost_cny(m, {**base, "cache_creation_input_tokens": 500}) == pytest.approx(c0 + 500 * 13 / 1e6)
+    # 缺少关键字段 → 无法估算 → None（调用方按占用上界记账）
+    assert gw.billed_cost_or_none(m, {"prompt_tokens": 10}) is None and gw.billed_cost_or_none(m, {}) is None
+
+    monkeypatch.setattr(gw, "BUDGET", gw.BudgetGuard())
+    monkeypatch.setenv("LLM_BUDGET_CNY", "20")
+    body = {"model": m, "usage": {"prompt_tokens": 10}, "choices": [{"index": 0, "finish_reason": "stop",
+                                                                      "message": {"role": "assistant", "content": "好"}}]}
+    client = OpenAICompatibleClient(KIMI, backoff_s=0, transport=httpx.MockTransport(lambda r: httpx.Response(200, json=body)))
+    client.chat([{"role": "user", "content": "你好"}])
+    assert gw.BUDGET.spent == pytest.approx(8192 * 68 / 1e6, rel=0.05)  # 响应缺 completion_tokens：按上界
+
+
+def test_settle_event_keeps_usage_fields_for_reconciliation(diag, tmp_path, guard):
+    out = tmp_path / "ab"
+    usage = {"prompt_tokens": 2000, "completion_tokens": 1500, "prompt_tokens_details": {"cached_tokens": 100},
+             "completion_tokens_details": {"reasoning_tokens": 900}}
+    _run(diag, _real_client(lambda r: _chat_ok(A_TEXT, usage) if _is_a(r) else _chat_ok(_drafts(diag)[1], usage)), out)
+    settles = [json.loads(x) for x in (out / "ledger.jsonl").read_text("utf-8").splitlines() if json.loads(x)["ev"] == "settle"]
+    assert settles and all(x["usage"]["cached_tokens"] == 100 and x["usage"]["reasoning_tokens"] == 900 for x in settles)
+
+
+# ------------------------------------------------------------------ 2026-11-03 复核后的修复
+
+A_REFUSE = ("## 核心结论\n目前无法对贵州茅台（600519）作出有数据依据的财务结论，不能虚构数字。\n"
+            "## 主要风险\n未获得年报，不填报未经核实的具体金额。\n")
+
+
+def _run_one(diag, tmp_path, a_text=A_TEXT):
+    draft, fixed = _drafts(diag)
+    out = tmp_path / "ab"
+    ablation.run_all(["600519"], diag_of_factory(diag), MockLLM(script=[a_text, draft, fixed]), out, model="mock-llm",
+                     workers=1, log=lambda m: None)
+    return out
+
+
+def test_a_group_with_no_figures_is_reported_not_counted_as_clean(diag, tmp_path):
+    out = _run_one(diag, tmp_path, A_REFUSE)  # 正文里只有股票代码，没有任何财务数字
+    rec = json.loads((out / "companies" / "600519.json").read_text(encoding="utf-8"))
+    s = ablation.score_company(rec, diag)
+    assert s["A"]["total"] == 0 and s["A"]["problems"] == 0  # 股票代码 600519 不再被算成“问题数字”
+    summ = ablation.summarize([s])
+    assert summ["a_no_figures"] == ["600519"]
+    md = ablation.to_markdown(summ, None, {"model": "mock", "scoring_version": ablation.SCORING_VERSION})
+    assert "没有写出任何可核验数字的公司：600519" in md and "不应被理解为“零错误输出”" in md
+
+
+def test_period_split_separates_current_and_prior_period(diag):
+    refs = ablation._all_refs(diag)
+    cur, prior = diag.periods[0].end, diag.periods[1].end
+    rev = lambda p: next(e for e in refs.values() if e.label == "营业收入" and e.period == p)  # noqa: E731
+    old, new = rev(prior).value / 1e8, rev(cur).value / 1e8
+    text = (f"{prior[:4]}年营业收入为{old:.2f}亿元。\n{cur[:4]}年营业收入为{old:.2f}亿元。\n| 营业收入 | {old:.2f}亿元 |\n"
+            f"本期营业收入{new:.2f}亿元。")
+    from finsight.reporting.verifier import verify
+
+    split = ablation.period_split(verify(text, refs).claims, refs, cur[:4])
+    assert split == {"current": 1, "prior_stated": 1, "prior_conflict": 1, "prior_unstated": 1}
+
+
+def test_auditable_drops_scale_numbers_and_repeats(diag):
+    from finsight.reporting.verifier import verify
+
+    param = next(e for e in diag.evidence.values() if e.kind == "param")
+    refs = {"E1": param}
+    text = f"阈值为 {param.value:.2f}[E1]，再次提到 {param.value:.2f}[E1]。"
+    claims = verify(text, refs).claims
+    assert len(claims) == 2 and claims[0].evidence_id == param.id
+    assert ablation._auditable(claims, refs) == []  # 阈值 / 满分类标尺数字不抽检
+    a_claims = verify("净利润 888.88 亿元，资产负债率 12.34%；再次说明净利润 888.88 亿元。", ablation._all_refs(diag)).claims
+    assert len(a_claims) == 3 and len(ablation._auditable(a_claims, ablation._all_refs(diag))) == 2  # 同一数字只留一个
+
+
+def test_stratified_sampling_balances_companies():
+    import random
+
+    pool = [({"code": c}, None) for c, n in (("A1", 40), ("B2", 5), ("C3", 3), ("D4", 30)) for _ in range(n)]
+    picked = ablation._stratified(pool, 12, random.Random(1))
+    counts = {c: sum(1 for r, _ in picked if r["code"] == c) for c in ("A1", "B2", "C3", "D4")}
+    assert sum(counts.values()) == 12 and max(counts.values()) - min(counts.values()) <= 1 and counts["C3"] == 3
+    assert len(ablation._stratified(pool, 999, random.Random(1))) == len(pool)  # 池抽空为止，不重复
+
+
+def test_audit_sheet_has_no_citation_markers_and_pools_identical_bc(diag, tmp_path):
+    out = _run_one(diag, tmp_path)
+    diag_of = diag_of_factory(diag)
+    ablation.score_dir(out, diag_of)
+    key = json.loads((out / "audit_key.json").read_text(encoding="utf-8"))
+    with (out / "audit_sheet.csv").open(encoding="utf-8-sig", newline="") as f:
+        rows = list(csv.DictReader(f))
+    assert rows and not any("[E" in r["所在句子"] or "未核验" in r["所在句子"] for r in rows)  # 没有组别线索
+    assert any(k["groups"] == ["B", "C"] for k in key.values())  # 共有数字合并，判一次、计入两组
+    assert any(k["groups"] == ["B"] for k in key.values())  # 初稿里被修订删掉的数字单独抽
+    assert not any(k["groups"] == ["C"] for k in key.values())
+    ids = [(k["code"], k["number"]) for k in key.values() if k["groups"] != ["A"]]
+    assert len(ids) == len(set(ids))
+
+
+def test_regen_audit_archives_old_files_and_refuses_filled_sheet(diag, tmp_path):
+    out = _run_one(diag, tmp_path)
+    diag_of = diag_of_factory(diag)
+    ablation.score_dir(out, diag_of)
+    old_sheet = (out / "audit_sheet.csv").read_text(encoding="utf-8-sig")
+    old_key = (out / "audit_key.json").read_text(encoding="utf-8")
+
+    ablation.score_dir(out, diag_of)  # 默认重复打分不换样本
+    assert (out / "audit_key.json").read_text(encoding="utf-8") == old_key and not (out / "audit_sheet.v1.csv").exists()
+
+    ablation.score_dir(out, diag_of, regen_audit=True)
+    assert (out / "audit_sheet.v1.csv").read_text(encoding="utf-8-sig") == old_sheet
+    assert (out / "audit_key.v1.json").read_text(encoding="utf-8") == old_key
+    assert (out / "ablation.v1.json").exists() and (out / "ablation_report.v1.md").exists()
+    assert "留档为 *.v1.*" in (out / "ablation_report.md").read_text(encoding="utf-8")
+
+    # 有人填过判定：拒绝重新生成，且不动任何文件
+    with (out / "audit_sheet.csv").open(encoding="utf-8-sig", newline="") as f:
+        rows = list(csv.DictReader(f))
+    rows[0]["判定（填：对 / 错 / 不确定）"] = "对"
+    with (out / "audit_sheet.csv").open("w", encoding="utf-8-sig", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+        w.writeheader()
+        w.writerows(rows)
+    before = (out / "audit_sheet.csv").read_bytes(), (out / "audit_key.json").read_bytes()
+    with pytest.raises(ablation.SampleError, match="已经有人工判定"):
+        ablation.score_dir(out, diag_of, regen_audit=True)
+    assert ((out / "audit_sheet.csv").read_bytes(), (out / "audit_key.json").read_bytes()) == before
+    assert not (out / "audit_sheet.v2.csv").exists()
+
+
+@pytest.mark.parametrize("regen", [False, True])
+def test_missing_audit_key_never_overwrites_filled_sheet(diag, tmp_path, regen):
+    out = _run_one(diag, tmp_path)
+    diag_of = diag_of_factory(diag)
+    ablation.score_dir(out, diag_of)
+    sheet = out / "audit_sheet.csv"
+    with sheet.open(encoding="utf-8-sig", newline="") as f:
+        rows = list(csv.DictReader(f))
+    rows[0]["判定（填：对 / 错 / 不确定）"] = "不确定"
+    with sheet.open("w", encoding="utf-8-sig", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=list(rows[0]))
+        writer.writeheader()
+        writer.writerows(rows)
+    (out / "audit_key.json").unlink()
+    before = {p.name: p.read_bytes() for p in out.iterdir() if p.is_file()}
+    with pytest.raises(ablation.SampleError, match="已经有人工判定"):
+        ablation.score_dir(out, diag_of, regen_audit=regen)
+    assert {p.name: p.read_bytes() for p in out.iterdir() if p.is_file()} == before

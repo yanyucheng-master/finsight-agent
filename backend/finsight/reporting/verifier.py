@@ -46,6 +46,18 @@ SKIP_AFTER = re.compile(r"^\s*(年|月|日|季度|季|月份|期|家|条|项|个
 # 写作格式计数（“1–3 句”“3-5 条”），不是财务断言；模型偶尔会把提示词里的格式要求抄进标题
 FORMAT_COUNT = re.compile(r"^\s*(?:[–—\-~～至到]\s*\d+\s*)?(句|段|点|字|行|条|项|节)")
 DATE_RE = re.compile(r"\d{4}[-/.]\d{1,2}[-/.]\d{1,2}")
+# 不是财务断言的“数字”：股票代码和产品品牌名里的数字。2026-11-02 真实评测复核发现：A 组正文里的“獐子岛（002069）”
+# 被当成数字 2069 判成“无证据”，“国窖1573”的 1573 同理。只在有明确上下文时屏蔽，避免漏掉凭空写出的 6 位金额。
+_CODE_BODY = r"(?:00[0-3]|30[01]|60[0135]|68[89]|920|43\d|8[3-9]\d)\d{3}"
+# 数字后紧跟更多位、小数 / 千分位或财务单位时，保留完整数值供核验，不能把前几位当成代码 / 品牌吞掉。
+_NONCLAIM_END = r"(?!\d|[.,]\d|\s*(?:亿元|万元|元/股|元|个百分点|百分点|pp|[%％倍天xX]))"
+STOCK_CODE_RE = re.compile(
+    rf"(?<=[（(【\[])\s*{_CODE_BODY}\s*(?=[）)】\]])"  # （002069）
+    rf"|(?<=代码)\s*[:：]?\s*{_CODE_BODY}{_NONCLAIM_END}"  # 股票代码：002069
+    rf"|(?<![0-9A-Za-z]){_CODE_BODY}(?=\.(?:SZ|SH|BJ)\b)"  # 002069.SZ
+    rf"|(?<=SZ|SH|BJ){_CODE_BODY}(?!\d)"  # SZ002069
+)
+BRAND_NUMBER_RE = re.compile(rf"(?:国窖|五粮液|普五|经典)\s*(?:1573|1618){_NONCLAIM_END}")
 ADVICE_RE = re.compile(r"(建议|推荐|可以|应当|宜)\s*(买入|卖出|增持|减持|持有|抄底|加仓|减仓)|目标价|买入评级|卖出评级")
 
 # 表示“变化方向为负”的措辞（只看数字前、同一分句内）。“降至 / 减至”描述的是水平，不算。
@@ -222,6 +234,9 @@ def verify(text: str, refs: dict[str, Evidence]) -> VerificationResult:
         masked[s:e] = ["§"] * (e - s)  # 用非空白占位，避免被数字后的空白匹配吞掉
     for m in DATE_RE.finditer(text):
         masked[m.start():m.end()] = ["#"] * (m.end() - m.start())
+    for rx in (STOCK_CODE_RE, BRAND_NUMBER_RE):  # 股票代码 / 品牌名中的数字：不是财务断言
+        for m in rx.finditer(text):
+            masked[m.start():m.end()] = ["~"] * (m.end() - m.start())
     mtext = "".join(masked)
 
     claims: list[Claim] = []
