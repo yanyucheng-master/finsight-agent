@@ -12,3 +12,5 @@ data/snapshots/objects/**/*.pdf
 data/*.db
 .repo/
 data/runs/
+# 打包输出（scripts/package_code.py）
+/dist/

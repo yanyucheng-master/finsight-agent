@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -344,7 +345,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
     from finsight.data.snapshots import SnapshotIntegrityError, SnapshotStore
 
     store = SnapshotStore(load_settings().snapshot_dir)
-    ok = bad = missing = 0
+    ok = bad = missing = missing_pdf = 0
     for rec in store.iter_records():
         if not rec.ok:
             continue
@@ -355,9 +356,14 @@ def cmd_verify(args: argparse.Namespace) -> int:
             bad += 1
             print("篡改/损坏:", exc)
         except FileNotFoundError:
-            missing += 1
-    print(f"快照对象校验：正常 {ok}，哈希不一致 {bad}，文件缺失 {missing}")
-    return 0 if bad == 0 else 1
+            # 年报 PDF 体积大（单份数 MB），不随仓库 / 代码包分发（见 .gitignore），分析流程也不读取它们
+            if "pdf" in (rec.content_type or "").lower():
+                missing_pdf += 1
+            else:
+                missing += 1
+    print(f"快照对象校验：正常 {ok}，哈希不一致 {bad}，文件缺失 {missing}"
+          + (f"；另有 {missing_pdf} 份年报 PDF 未随仓库分发（体积大，分析不依赖，manifest 中保留了哈希）" if missing_pdf else ""))
+    return 0 if bad == 0 and missing == 0 else 1
 
 
 def cmd_samples(args: argparse.Namespace) -> int:
@@ -409,9 +415,22 @@ def cmd_samples(args: argparse.Namespace) -> int:
     return 1 if failed else 0
 
 
+def _env_port(default: int = 8000) -> int:
+    try:
+        return int(os.environ.get("PORT", "") or default)
+    except ValueError:
+        return default
+
+
 def cmd_serve(args: argparse.Namespace) -> int:
     import uvicorn
 
+    if getattr(args, "open", False):  # 服务启动后再打开浏览器，避免先看到“无法访问”
+        import threading
+        import webbrowser
+
+        host = "127.0.0.1" if args.host in ("0.0.0.0", "::") else args.host
+        threading.Timer(2.0, webbrowser.open, args=(f"http://{host}:{args.port}/",)).start()
     uvicorn.run("finsight.api.app:create_app", factory=True, host=args.host, port=args.port, reload=False)
     return 0
 
@@ -481,9 +500,11 @@ def main(argv: list[str] | None = None) -> int:
     p.set_defaults(func=cmd_samples)
     p = sub.add_parser("verify-snapshots", help="校验快照完整性")
     p.set_defaults(func=cmd_verify)
-    p = sub.add_parser("serve", help="启动 API 服务")
-    p.add_argument("--host", default="127.0.0.1")
-    p.add_argument("--port", type=int, default=8000)
+    p = sub.add_parser("serve", help="启动 API 服务（部署平台用环境变量 PORT 指定端口）")
+    p.add_argument("--host", default=os.environ.get("FINSIGHT_HOST", "127.0.0.1"),
+                   help="监听地址，默认取环境变量 FINSIGHT_HOST，否则 127.0.0.1（仅本机）；公网部署用 0.0.0.0")
+    p.add_argument("--port", type=int, default=_env_port(), help="端口，默认取环境变量 PORT，否则 8000")
+    p.add_argument("--open", action="store_true", help="启动后自动用默认浏览器打开工作台")
     p.set_defaults(func=cmd_serve)
     p = sub.add_parser("collect", help="在线采集数据快照")
     p.add_argument("--symbols", default="")

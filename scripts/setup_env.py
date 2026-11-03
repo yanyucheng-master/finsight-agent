@@ -18,16 +18,18 @@ def main() -> None:
             return
     deepseek = ask("DeepSeek")
     kimi = ask("Kimi (Moonshot)")
+    # 参赛使用 Kimi：填了 Kimi Key 就默认用它；只填 DeepSeek 时用 DeepSeek（低成本测试）
+    provider = "kimi" if kimi else "deepseek"
     lines = [
         "# 本机密钥文件，已被 .gitignore 忽略，切勿提交或外发",
-        "LLM_PROVIDER=deepseek",
+        f"LLM_PROVIDER={provider}",
         f"DEEPSEEK_API_KEY={deepseek}",
         f"KIMI_API_KEY={kimi}",
         "FINSIGHT_PROVIDER=snapshot",
         "",
     ]
     ENV.write_text("\n".join(lines), encoding="utf-8")
-    print(f"已写入 {ENV}（DeepSeek：{'已填' if deepseek else '未填'}，Kimi：{'已填' if kimi else '未填'}）")
+    print(f"已写入 {ENV}（DeepSeek：{'已填' if deepseek else '未填'}，Kimi：{'已填' if kimi else '未填'}；当前使用 {provider}）")
 
 
 if __name__ == "__main__":

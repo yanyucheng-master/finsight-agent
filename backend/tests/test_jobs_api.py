@@ -105,11 +105,35 @@ def test_live_limit_per_visitor_and_forwarded_header_is_ignored(svc, code, tmp_p
 def test_forwarded_header_is_used_behind_trusted_proxy(svc, code, tmp_path):
     llm = MockLLM(responder=lambda m, t: LLMResponse(content=_good_text(svc, code)))
     client = _app(svc, tmp_path, llm, demo_mode=True, live_per_ip_daily=1, live_daily_limit=10, trust_proxy=True)
+    # 代理把真实来源追加在末尾：9.9.9.9 是代理看到的访客，前面的 1.1.1.1 是访客自己填的
     a = client.post(f"/api/companies/{code}/report/jobs?mode=llm", headers={"x-forwarded-for": "1.1.1.1, 9.9.9.9"})
     b = client.post(f"/api/companies/{code}/report/jobs?mode=llm", headers={"x-forwarded-for": "2.2.2.2"})
-    c = client.post(f"/api/companies/{code}/report/jobs?mode=llm", headers={"x-forwarded-for": "1.1.1.1"})
+    c = client.post(f"/api/companies/{code}/report/jobs?mode=llm", headers={"x-forwarded-for": "9.9.9.9"})
     assert (a.status_code, b.status_code, c.status_code) == (200, 200, 429)
     for r in (a, b):
+        _wait(client, r.json()["id"])
+
+
+def test_spoofed_leftmost_forwarded_entry_does_not_buy_quota(svc, code, tmp_path):
+    """访客每次在 X-Forwarded-For 里填不同的假地址，代理仍会把真实地址追加到末尾：额度按真实地址计。"""
+    llm = MockLLM(responder=lambda m, t: LLMResponse(content=_good_text(svc, code)))
+    client = _app(svc, tmp_path, llm, demo_mode=True, live_per_ip_daily=1, live_daily_limit=10, trust_proxy=True)
+    a = client.post(f"/api/companies/{code}/report/jobs?mode=llm", headers={"x-forwarded-for": "10.0.0.1, 8.8.8.8"})
+    b = client.post(f"/api/companies/{code}/report/jobs?mode=llm", headers={"x-forwarded-for": "10.0.0.2, 8.8.8.8"})
+    assert (a.status_code, b.status_code) == (200, 429)
+    _wait(client, a.json()["id"])
+
+
+def test_proxy_hops_selects_entry_added_by_outermost_trusted_proxy(svc, code, tmp_path):
+    llm = MockLLM(responder=lambda m, t: LLMResponse(content=_good_text(svc, code)))
+    client = _app(svc, tmp_path, llm, demo_mode=True, live_per_ip_daily=1, live_daily_limit=10, trust_proxy=True,
+                  proxy_hops=2)
+    # 两层可信代理：CDN 追加真实访客 7.7.7.7，负载均衡再追加 CDN 节点地址；伪造的最左值与 CDN 节点都不能代表访客
+    a = client.post(f"/api/companies/{code}/report/jobs?mode=llm", headers={"x-forwarded-for": "1.1.1.1, 7.7.7.7, 172.16.0.9"})
+    b = client.post(f"/api/companies/{code}/report/jobs?mode=llm", headers={"x-forwarded-for": "2.2.2.2, 7.7.7.7, 172.16.0.9"})
+    c = client.post(f"/api/companies/{code}/report/jobs?mode=llm", headers={"x-forwarded-for": "6.6.6.6, 172.16.0.9"})
+    assert (a.status_code, b.status_code, c.status_code) == (200, 429, 200)
+    for r in (a, c):
         _wait(client, r.json()["id"])
 
 

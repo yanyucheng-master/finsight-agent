@@ -45,7 +45,11 @@ python -m finsight.cli eval ablation-score DIR  # 评测②离线重新打分（
 cd frontend && npm install && npm run build    # 前端构建（输出到 backend/finsight/web）
 node frontend/e2e/smoke.cjs                    # 端到端冒烟（需先 serve）
 ruff check finsight tests
+python scripts/package_code.py --dry-run          # 参赛代码包：列出文件并做密钥检查（去掉 --dry-run 生成 dist/*.zip）
 ```
+
+部署（在线体验链接）见 `docs/DEPLOY.md`：单进程、可编辑安装、`FINSIGHT_DEMO_MODE=1`，Key 只放平台环境变量。
+静态文件托管必须限制在 `web/` 目录内（2026-11-03 修复过 `..%2f` 路径穿越可读取 `.env` 的漏洞，回归测试 `tests/test_api_security.py`）。
 
 ## 环境须知（重要）
 

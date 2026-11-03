@@ -44,10 +44,13 @@ def create_app(settings: Settings | None = None, service: DataService | None = N
     samples = SampleStore(settings.data_dir / "samples")
 
     def client_ip(request: Request) -> str:
-        if settings.trust_proxy:  # 只有明确部署在可信反向代理之后才读取转发头，否则访客可以伪造
-            fwd = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
-            if fwd:
-                return fwd
+        # 只有明确部署在可信反向代理之后才读取转发头，否则访客可以伪造。
+        # 代理是把对端地址“追加”到 X-Forwarded-For 末尾的：最左边的值由访客自己填写，可以随意伪造；
+        # 从右往左数第 proxy_hops 个才是最外层可信代理看到的真实来源。
+        if settings.trust_proxy:
+            parts = [x.strip() for x in request.headers.get("x-forwarded-for", "").split(",") if x.strip()]
+            if parts:
+                return parts[-min(settings.proxy_hops, len(parts))]
         return request.client.host if request.client else "unknown"
 
     @lru_cache(maxsize=64)
@@ -236,11 +239,20 @@ def create_app(settings: Settings | None = None, service: DataService | None = N
         return metric_catalog()
 
     if WEB_DIR.exists():
+        web_root = WEB_DIR.resolve()
+
         @app.get("/{path:path}", include_in_schema=False)
         def spa(path: str):
-            target = WEB_DIR / path
-            if path and target.is_file():
-                return FileResponse(target)
-            return FileResponse(WEB_DIR / "index.html")
+            # 只允许读取 web/ 目录内的文件：路径参数是解码后的值，“..%2f”之类可以跳出目录读到 .env 等文件
+            if path:
+                try:
+                    target = (web_root / path).resolve()
+                except (OSError, ValueError):
+                    target = None
+                if target is not None and target.is_relative_to(web_root) and target.is_file():
+                    return FileResponse(target)
+            if path == "api" or path.startswith("api/"):  # 未知接口返回 404，而不是首页
+                raise HTTPException(404, "接口不存在")
+            return FileResponse(web_root / "index.html")
 
     return app

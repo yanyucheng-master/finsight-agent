@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, waitJob } from "../api";
 import { fmtValue, LEVEL_STYLE, sevOf, THRESHOLD_TYPE, year } from "../format";
 import type { AgentAnswer, DemoStatus, DiagnosisResult, JobStatus, MetricRow, Report, SampleMeta, Signal } from "../types";
 import { Cite, CitedText, useEvidence } from "./Evidence";
 import { CachedBadge, JobProgress, LiveQuota } from "./Progress";
-import { TrendChart } from "./TrendChart";
 import { VerificationBar, VerifiedMarkdown } from "./Verified";
+
+// ECharts 体积大（约 600 KB），只有“指标趋势”页用到：按需加载，首页与简报页更快打开
+const TrendChart = lazy(() => import("./TrendChart").then((m) => ({ default: m.TrendChart })));
 
 const TABS = [
   { key: "risk", label: "风险体检" },
@@ -184,11 +186,17 @@ function useDemo() {
 }
 
 function useSamples(code: string, kind: "report" | "ask") {
-  const [list, setList] = useState<SampleMeta[]>([]);
+  const [all, setAll] = useState<SampleMeta[]>([]);
   useEffect(() => {
-    api.samples().then((all) => setList(all.filter((x) => x.code === code && x.kind === kind))).catch(() => setList([]));
-  }, [code, kind]);
-  return list;
+    api.samples().then((xs) => setAll(xs.filter((x) => x.kind === kind))).catch(() => setAll([]));
+  }, [kind]);
+  const mine = useMemo(() => all.filter((x) => x.code === code), [all, code]);
+  return { mine, all };
+}
+
+/** 同一公司有多个样例时，按钮上带生成日期区分；只有一个时保持简洁。 */
+function sampleLabel(s: SampleMeta, many: boolean): string {
+  return many && s.generated_at ? `查看 AI 样例（${s.generated_at.slice(0, 10)}）` : "查看 AI 样例（秒开）";
 }
 
 function useAlive() {
@@ -203,7 +211,7 @@ function BriefTab({ d }: { d: DiagnosisResult }) {
   const code = d.profile.code;
   const alive = useAlive();
   const { demo, refresh, canLive } = useDemo();
-  const samples = useSamples(code, "report");
+  const { mine: samples } = useSamples(code, "report");
   const [rep, setRep] = useState<Report | null>(null);
   const [cached, setCached] = useState<SampleMeta | null>(null);
   const [job, setJob] = useState<JobStatus | null>(null);
@@ -252,7 +260,7 @@ function BriefTab({ d }: { d: DiagnosisResult }) {
         {samples.map((s) => (
           <button key={s.id} disabled={busy} onClick={() => open(s)}
             className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900 hover:bg-amber-100 disabled:opacity-60">
-            查看 AI 样例（秒开）
+            {sampleLabel(s, samples.length > 1)}
           </button>
         ))}
         <button disabled={busy || !canLive} onClick={() => run("llm")}
@@ -309,14 +317,19 @@ function AskTab({ d }: { d: DiagnosisResult }) {
   const code = d.profile.code;
   const alive = useAlive();
   const { demo, refresh, canLive } = useDemo();
-  const samples = useSamples(code, "ask");
+  const { mine: samples, all: allSamples } = useSamples(code, "ask");
+  const otherSampleCos = useMemo(() => {
+    const seen = new Map<string, string>();
+    allSamples.forEach((x) => { if (x.code !== code && !seen.has(x.code)) seen.set(x.code, x.name); });
+    return [...seen.entries()];
+  }, [allSamples, code]);
   const [q, setQ] = useState("");
   const [items, setItems] = useState<{ a: AgentAnswer; cached?: SampleMeta }[]>([]);
   const [job, setJob] = useState<JobStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const ask = async (question: string) => {
-    if (!question.trim() || !canLive) return;
+    if (!question.trim() || !canLive || busy) return; // busy：防止连按回车重复提交、重复消耗额度
     setBusy(true); setErr(null); setJob(null);
     try {
       const start = await api.startAsk(code, question);
@@ -341,7 +354,7 @@ function AskTab({ d }: { d: DiagnosisResult }) {
     <div className="space-y-4">
       <div className="rounded-xl border bg-white p-4 shadow-sm">
         <div className="flex gap-2">
-          <input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && ask(q)}
+          <input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) void ask(q); }}
             placeholder={`向研究智能体提问，例如：${SUGGESTIONS[0]}`}
             className="flex-1 rounded-lg border px-3 py-2 text-sm outline-none focus:border-brand-500" />
           <button disabled={busy || !canLive} onClick={() => ask(q)}
@@ -373,6 +386,19 @@ function AskTab({ d }: { d: DiagnosisResult }) {
       </div>
       {job && <JobProgress job={job} />}
       {err && <div className="rounded bg-red-50 p-3 text-sm text-red-700">{err}</div>}
+      {items.length === 0 && !job && !canLive && samples.length === 0 && (
+        <div className="rounded-xl border border-dashed bg-white p-4 text-sm leading-relaxed text-slate-500">
+          这家公司还没有缓存的问答样例，当前也不能实时提问（{demo?.llm_enabled ? "今日实时生成额度已用完" : "服务端未配置大模型 Key"}）。
+          {otherSampleCos.length > 0 && (
+            <>可以先看看其他公司的真实问答样例：
+              {otherSampleCos.map(([c, name]) => (
+                <a key={c} href={`#/c/${c}`} className="ml-2 text-brand-700 underline">{name}</a>
+              ))}
+              。</>
+          )}
+          “风险体检”“研究简报（模板）”“指标趋势”等功能不调用大模型，随时可用。
+        </div>
+      )}
       {items.map(({ a, cached }, i) => (
         <article key={i} className="space-y-3 rounded-2xl border bg-white p-5 shadow-sm">
           {cached && <CachedBadge s={cached} />}
@@ -422,7 +448,9 @@ function MetricsTab({ d }: { d: DiagnosisResult }) {
       <section className="rounded-xl border bg-white p-4 shadow-sm">
         <div className="mb-1 text-sm font-semibold text-slate-700">{sel.label}</div>
         <div className="text-xs text-slate-500">公式：{sel.formula}{sel.description ? `。${sel.description}` : ""}</div>
-        <TrendChart series={series} />
+        <Suspense fallback={<div className="flex h-[220px] items-center justify-center text-xs text-slate-400">图表加载中…</div>}>
+          <TrendChart series={series} />
+        </Suspense>
       </section>
       <div className="overflow-x-auto rounded-xl border bg-white shadow-sm">
         <table className="w-full text-sm">
