@@ -1089,3 +1089,15 @@ def test_missing_audit_key_never_overwrites_filled_sheet(diag, tmp_path, regen):
     with pytest.raises(ablation.SampleError, match="已经有人工判定"):
         ablation.score_dir(out, diag_of, regen_audit=regen)
     assert {p.name: p.read_bytes() for p in out.iterdir() if p.is_file()} == before
+
+
+def test_cli_labels_ai_assisted_review_without_claiming_human_independence(diag, tmp_path, capsys):
+    out = _run_one(diag, tmp_path)
+    ablation.score_dir(out, diag_of_factory(diag))
+    sheet = out / "audit_sheet.csv"
+    assert cli_main(["eval", "ablation-score", str(out), "--audit", str(sheet), "--audit-kind", "ai-assisted"]) == 0
+    output = capsys.readouterr().out
+    assert "AI 辅助财报抽检（非盲审）" in output
+    assert "不是独立人工盲审" in output and "不构成独立真值" in output
+    assert "## 人工抽检（独立口径）" not in output
+    assert json.loads((out / "ablation.json").read_text("utf-8"))["meta"]["audit_kind"] == "ai-assisted"

@@ -240,7 +240,7 @@ def _eval_ablation(args: argparse.Namespace) -> int:
     if args.which == "ablation-score":
         out = Path(args.target) if args.target else root / "docs" / "eval" / f"ablation-{provider}"
         res = ablation.score_dir(out, diag_of, audit_file=Path(args.audit) if args.audit else None, per_group=args.per_group,
-                                 regen_audit=args.regen_audit)
+                                 regen_audit=args.regen_audit, audit_kind=args.audit_kind)
         print((out / "ablation_report.md").read_text(encoding="utf-8"))
         print(f"已写入 {out / 'ablation_report.md'}" + ("" if args.audit else f"；抽检表 {out / 'audit_sheet.csv'}"))
         return 0 if res else 1
@@ -467,6 +467,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--dry-run", action="store_true", help="ablation：只核对参数、账本与各公司的费用占用上界，不发送任何请求")
     p.add_argument("--ask", action="store_true", help="ablation：打印运行计划后，必须手动输入 YES 才开始发送请求")
     p.add_argument("--audit", default="", help="ablation-score：填好的人工抽检表（csv）")
+    p.add_argument("--audit-kind", choices=["human", "ai-assisted"], default="human",
+                   help="ablation-score：抽检者类型；AI 辅助复核必须选 ai-assisted，不标为独立人工盲审")
     p.add_argument("--per-group", type=int, default=20, help="人工抽检：A 组、B/C 共有数字各抽取的个数")
     p.add_argument("--regen-audit", action="store_true",
                    help="ablation-score：用新口径重新生成抽检表（旧表、旧报告留档为 *.vN.*）；旧表已有人工判定时拒绝")

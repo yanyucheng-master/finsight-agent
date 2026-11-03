@@ -1,7 +1,7 @@
 {
  "meta": {
   "model": "kimi-k3.1-pro",
-  "generated": "2026-11-03 07:43 UTC",
+  "generated": "2026-11-03 08:10 UTC",
   "prompts": {
    "A_system": "你是一名严谨的证券研究分析师，为专业投研人员撰写上市公司财务风险研究简报。",
    "A_user_example": "请撰写一份关于（公司名）（（代码））（年份）年年报（报告期截至（年份）年12月31日）的财务状况与风险研究简报，需要给出具体的关键财务数据和风险判断。\n输出 Markdown，固定使用以下五个二级标题：\n## 核心结论\n## 主要风险\n## 积极因素\n## 建议进一步核实的事项\n## 数据与方法说明",
@@ -10,6 +10,7 @@
   },
   "scoring_version": 2,
   "regen_note": "",
+  "audit_kind": "ai-assisted",
   "ledger": {
    "total_cost_cny_est": 5.164187,
    "requests": 19,
@@ -495,5 +496,50 @@
    }
   }
  ],
- "audit": null
+ "audit": {
+  "groups": {
+   "A": {
+    "sampled": 20,
+    "judged": 20,
+    "wrong": 2,
+    "unsure_or_blank": 0,
+    "wrong_rate": 0.1,
+    "ci95": [
+     0.027865893984153206,
+     0.30103820641179335
+    ]
+   },
+   "B": {
+    "sampled": 20,
+    "judged": 20,
+    "wrong": 0,
+    "unsure_or_blank": 0,
+    "wrong_rate": 0.0,
+    "ci95": [
+     0.0,
+     0.16113012549493322
+    ]
+   },
+   "C": {
+    "sampled": 20,
+    "judged": 20,
+    "wrong": 0,
+    "unsure_or_blank": 0,
+    "wrong_rate": 0.0,
+    "ci95": [
+     0.0,
+     0.16113012549493322
+    ]
+   }
+  },
+  "verifier_vs_human": {
+   "tp": 2,
+   "fp": 14,
+   "fn": 0,
+   "tn": 24,
+   "precision": 0.125,
+   "recall": 1.0
+  },
+  "filled": 40
+ }
 }

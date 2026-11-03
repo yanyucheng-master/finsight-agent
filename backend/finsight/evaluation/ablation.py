@@ -846,6 +846,7 @@ def _pct(x: float | None) -> str:
 
 def to_markdown(summary: dict[str, Any], audit: dict[str, Any] | None, meta: dict[str, Any]) -> str:
     g = summary["groups"]
+    ai_audit = meta.get("audit_kind") == "ai-assisted"
     lines = [f"# 评测②：数字幻觉对比（{meta.get('model', '?')}，{summary['companies']} 家公司）", "",
              f"生成时间 {meta.get('generated', '')}。三组使用同一模型、同一公司、同一报告期；B 是 C 的初稿（配对对比）。"
              "**提示词不同**：A 组只有一段简短的任务说明（不给证据、不要求引用，原文见 `ablation.json` 的 meta.prompts）；"
@@ -863,7 +864,7 @@ def to_markdown(summary: dict[str, Any], audit: dict[str, Any] | None, meta: dic
               f"修订请求失败而保留初稿：{summary['revision_failed_reports']}；"
               f"无效、未纳入统计的公司：{excl}。", "",
               "说明：A 组没有引用，“问题数字”指在该公司全部证据里找不到可信归属的数字，可能是编造，也可能是证据库之外的真实数字；"
-              "B/C 组指不一致 / 引用无效 / 无证据。核验器统计自己的输出会有循环论证，因此下面用人工抽检校验。", ""]
+              "B/C 组指不一致 / 引用无效 / 无证据。核验器统计自己的输出会有循环论证，因此下面用财报抽检对照。", ""]
     ap = summary.get("a_period") or {}
     if sum(ap.values()):
         n_attr = sum(ap.values())
@@ -888,16 +889,24 @@ def to_markdown(summary: dict[str, Any], audit: dict[str, Any] | None, meta: dic
         lines += ["## 人工抽检", "", "尚未提供填好的抽检表（`audit_sheet.csv`）。填完后运行 "
                   "`finsight eval ablation-score <目录> --audit <填好的csv>` 生成本节。", ""]
     else:
-        lines += ["## 人工抽检（独立口径）", "", f"已判定 {audit['filled']} 个数字；“不确定 / 空”不计入错误率；"
+        heading = "## AI 辅助财报抽检（非盲审）" if ai_audit else "## 人工抽检（独立口径）"
+        lines += [heading, ""]
+        if ai_audit:
+            lines += ["本节由 Codex 对照原始财报与监管原文填写，包含独立算术复算。审核者已接触分组映射与自动统计，"
+                      "不是独立人工盲审，标签不构成独立真值。历史数字按原始简报完整表头与上下文判断，不能仅因报告期栏不同而判错。", ""]
+        lines += [f"已判定 {audit['filled']} 个数字；“不确定 / 空”不计入错误率；"
                   "B、C 中完全相同的数字只判一次，同时计入两组（B 未被修订时两组文本相同，样本也相同，两组错误率之差不含信息）。", "",
-                  "| 组 | 抽样数 | 已判定 | 判错 | 人工错误率 | 95% 区间（Wilson） |", "|---|---|---|---|---|---|"]
+                  "| 组 | 抽样数 | 已判定 | 判错 | 抽检判错率 | 95% 参考区间（Wilson） |", "|---|---|---|---|---|---|"]
         for k in ("A", "B", "C"):
             a = audit["groups"][k]
             lo, hi = a["ci95"]
             lines.append(f"| {GROUP_LABEL[k]} | {a['sampled']} | {a['judged']} | {a['wrong']} | {_pct(a['wrong_rate'])} | "
                          f"{_pct(lo)} – {_pct(hi)} |")
         v = audit["verifier_vs_human"]
-        lines += ["", "核验器对照人工判定（核验器标出“问题数字” = 阳性；人工判“错” = 真阳性）：",
+        comparison = "AI 辅助复核标签（不是独立真值）" if ai_audit else "人工判定"
+        lines += ["", "分层抽样使不同公司的数字入样概率不同。这里未按全体数字的公司权重加权，Wilson 区间仅作参考，"
+                  "不能把此抽检判错率当成全部数字的总体错误率，也不支持组间显著性结论。", "",
+                  f"核验器对照{comparison}（标出“问题数字” = 阳性；复核判“错” = 参照阳性）：",
                   f"真阳性 {v['tp']}，假阳性 {v['fp']}，假阴性 {v['fn']}，真阴性 {v['tn']}；"
                   f"查准率 {_pct(v['precision'])}，查全率 {_pct(v['recall'])}。", ""]
     lines += ["## 局限", "", "* 样本很小（单次生成、少数公司），只能说明这批样本上的观察，不是统计显著的普遍规律。",
@@ -918,12 +927,15 @@ def load_records(out_dir: Path) -> list[dict[str, Any]]:
 
 
 def score_dir(out_dir: Path, diag_of: Callable[[str], DiagnosisResult], *, audit_file: Path | None = None,
-              per_group: int = 20, make_audit: bool = True, regen_audit: bool = False) -> dict[str, Any]:
+              per_group: int = 20, make_audit: bool = True, regen_audit: bool = False,
+              audit_kind: str = "human") -> dict[str, Any]:
     """从已保存的原始记录重新打分并写出报告 / 抽检表。不调用大模型，可反复运行。
 
     make_audit=False 用于“还没跑完”的中途打分：抽检表一经生成就固定，不能在数据不全时生成。
     regen_audit=True：用新口径重新生成抽检表（旧表、旧 key、旧报告留档为 *.vN.*）。只允许在旧抽检表还没人填过时使用，
     否则会让已填的判定对不上，直接拒绝。"""
+    if audit_kind not in {"human", "ai-assisted"}:
+        raise SampleError("audit_kind 必须为 human 或 ai-assisted")
     loaded = load_records(out_dir)
     records, excluded = [], []
     for r in loaded:
@@ -961,7 +973,7 @@ def score_dir(out_dir: Path, diag_of: Callable[[str], DiagnosisResult], *, audit
             "prompts": {"A_system": PURE_SYSTEM, "A_user_example": pure_prompt("（公司名）", "（代码）", "（年份）"),
                         "C_system_sha256": hashlib.sha256(SYSTEM_PROMPT.encode("utf-8")).hexdigest()[:16],
                         "note": "B/C 的系统提示、证据清单与规则见 reporting/report.py；A 与 B/C 的提示词不同，是实验干预的一部分"},
-            "scoring_version": SCORING_VERSION, "regen_note": regen_note}
+            "scoring_version": SCORING_VERSION, "regen_note": regen_note, "audit_kind": audit_kind if audit_file else None}
     if (out_dir / "ledger.jsonl").exists():  # 平均成本只含成功写入记录的请求；账本合计还含失败请求的保守预留
         led = read_ledger(out_dir)
         meta["ledger"] = {"total_cost_cny_est": led["total_cost_cny_est"], "requests": led["requests"],
