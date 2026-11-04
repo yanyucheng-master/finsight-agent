@@ -57,10 +57,11 @@ class Job:
 
 class JobManager:
     def __init__(self, max_workers: int = 2, ttl_s: float = 3600.0, max_jobs: int = 200):
-        self.max_pending = max(2, max_workers * 3)
+        self.max_pending = max(2, max_workers * 3) if max_workers > 0 else 0
         self.ttl_s = ttl_s
         self.max_jobs = max_jobs
-        self._pool = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="finsight-job")
+        self._pool = (ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="finsight-job")
+                      if max_workers > 0 else None)
         self._jobs: dict[str, Job] = {}
         self._lock = threading.Lock()
 
@@ -68,11 +69,14 @@ class JobManager:
         with self._lock:
             self._prune()
             pending = sum(1 for j in self._jobs.values() if j.status in ("queued", "running"))
-            if pending >= self.max_pending:
+            if self.max_pending and pending >= self.max_pending:
                 raise JobsBusy("当前排队的生成任务过多，请稍后再试")
             job = Job(id=uuid.uuid4().hex[:12], kind=kind, code=code, live=live)
             self._jobs[job.id] = job
-        self._pool.submit(self._run, job, fn)
+        if self._pool is None:
+            threading.Thread(target=self._run, args=(job, fn), name=f"finsight-job-{job.id}", daemon=False).start()
+        else:
+            self._pool.submit(self._run, job, fn)
         return job
 
     def get(self, job_id: str) -> Job | None:
@@ -85,7 +89,8 @@ class JobManager:
                     "running": sum(1 for j in self._jobs.values() if j.status == "running")}
 
     def shutdown(self) -> None:
-        self._pool.shutdown(wait=False, cancel_futures=True)
+        if self._pool is not None:
+            self._pool.shutdown(wait=False, cancel_futures=True)
 
     # ------------------------------------------------------------------ 内部
     def _prune(self) -> None:

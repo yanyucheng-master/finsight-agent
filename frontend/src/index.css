@@ -201,9 +201,11 @@ body { font-feature-settings: "cv11", "ss01"; -webkit-font-smoothing: antialiase
 .dot-alert { animation: fs-alert 2.2s ease-out infinite; }
 @keyframes fs-alert { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 55%, transparent); } 70%, 100% { box-shadow: 0 0 0 6px transparent; } }
 
-/* 进度阶段：当前阶段的旋转弧 */
-.stage-now::before { content: ""; position: absolute; inset: -4px; border-radius: 999px; border: 2px solid transparent;
-  border-top-color: var(--color-brand-500); border-right-color: var(--color-cyan); animation: fs-spin 1s linear infinite; }
+/* 进度阶段：流光限制在当前阶段标签内 */
+.stage-now { overflow: hidden; }
+.stage-now::before { content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: linear-gradient(110deg, transparent 25%, rgba(255, 255, 255, 0.3) 50%, transparent 75%);
+  transform: translateX(-100%); animation: fs-shimmer 1.8s ease-in-out infinite; }
 
 /* 抽屉 */
 .drawer-backdrop { animation: fs-fade 0.25s ease both; }

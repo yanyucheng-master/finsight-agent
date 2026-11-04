@@ -154,7 +154,7 @@ class Settings:
     demo_mode: bool = False
     live_daily_limit: int = 0       # 每天（北京时间）全站实时生成次数
     live_per_ip_daily: int = 0      # 每天每个访客实时生成次数
-    max_concurrent_jobs: int = 2    # 同时运行的生成任务数；排队上限为其 3 倍
+    max_concurrent_jobs: int = 2    # 0 表示不限并发和排队；正数时排队上限为其 3 倍
     trust_proxy: bool = False       # 部署在反向代理（如 Render）后面时，读取 X-Forwarded-For 识别访客
     proxy_hops: int = 1             # 可信代理的层数：取 X-Forwarded-For 从右往左第 N 个地址（最左边的值可被访客伪造）
 
@@ -173,7 +173,7 @@ def load_settings() -> Settings:
         demo_mode=demo,
         live_daily_limit=_env_int("FINSIGHT_LIVE_DAILY_LIMIT", 40 if demo else 0),
         live_per_ip_daily=_env_int("FINSIGHT_LIVE_PER_IP_DAILY", 3 if demo else 0),
-        max_concurrent_jobs=max(1, _env_int("FINSIGHT_MAX_CONCURRENT_JOBS", 2)),
+        max_concurrent_jobs=max(0, _env_int("FINSIGHT_MAX_CONCURRENT_JOBS", 2)),
         trust_proxy=_env_bool("FINSIGHT_TRUST_PROXY"),
         proxy_hops=max(1, _env_int("FINSIGHT_PROXY_HOPS", 1)),
     )
