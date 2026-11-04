@@ -4,6 +4,7 @@
 
 |生态|名称|参考版本|许可声明|许可文件数|
 |---|---|---|---|---|
+|npm|@fontsource-variable/dm-sans|5.3.0|OFL-1.1|1|
 |npm|@types/debug|4.1.13|MIT|1|
 |npm|@types/estree|1.0.9|MIT|1|
 |npm|@types/estree-jsx|1.0.5|MIT|1|

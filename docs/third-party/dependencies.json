@@ -1,6 +1,16 @@
 [
   {
     "ecosystem": "npm",
+    "name": "@fontsource-variable/dm-sans",
+    "version": "5.3.0",
+    "license": "OFL-1.1",
+    "source": "https://registry.npmjs.org/@fontsource-variable/dm-sans/-/dm-sans-5.3.0.tgz",
+    "notices": [
+      "npm/fontsource-variable__dm-sans-5.3.0/LICENSE"
+    ]
+  },
+  {
+    "ecosystem": "npm",
     "name": "@types/debug",
     "version": "4.1.13",
     "license": "MIT",
