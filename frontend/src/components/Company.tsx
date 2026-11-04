@@ -255,7 +255,7 @@ function BriefTab({ d }: { d: DiagnosisResult }) {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-white p-4 shadow-sm">
         <div className="mr-auto min-w-[16rem] flex-1 text-sm text-slate-600">
-          大模型只能使用带编号的证据撰写简报；核验器逐个比对其中的数字，不一致或无出处的会被打回修订，仍不合格的在文中标红。
+          大模型依据带编号的证据撰写简报，核验器逐个比对文中数字：不一致或缺少出处的打回修订，修订后仍不符的在文中标红。
         </div>
         {samples.map((s) => (
           <button key={s.id} disabled={busy} onClick={() => open(s)}
@@ -364,7 +364,7 @@ function AskTab({ d }: { d: DiagnosisResult }) {
         </div>
         {samples.length > 0 && (
           <div className="mt-3">
-            <div className="mb-1 text-xs text-slate-500">缓存样例问答（真实模型已生成并核验，点击秒开）：</div>
+            <div className="mb-1 text-xs text-slate-500">问答样例（kimi-k3.1-pro 生成，已核验）：</div>
             <div className="flex flex-wrap gap-2">
               {samples.map((s) => (
                 <button key={s.id} onClick={() => openSample(s)}
@@ -388,15 +388,15 @@ function AskTab({ d }: { d: DiagnosisResult }) {
       {err && <div className="rounded bg-red-50 p-3 text-sm text-red-700">{err}</div>}
       {items.length === 0 && !job && !canLive && samples.length === 0 && (
         <div className="rounded-xl border border-dashed bg-white p-4 text-sm leading-relaxed text-slate-500">
-          这家公司还没有缓存的问答样例，当前也不能实时提问（{demo?.llm_enabled ? "今日实时生成额度已用完" : "服务端未配置大模型 Key"}）。
+          这家公司暂无问答样例，实时提问当前不可用（{demo?.llm_enabled ? "今日实时生成额度已用完" : "服务端未配置大模型 Key"}）。
           {otherSampleCos.length > 0 && (
-            <>可以先看看其他公司的真实问答样例：
+            <>可查看其他公司的问答样例：
               {otherSampleCos.map(([c, name]) => (
                 <a key={c} href={`#/c/${c}`} className="ml-2 text-brand-700 underline">{name}</a>
               ))}
               。</>
           )}
-          “风险体检”“研究简报（模板）”“指标趋势”等功能不调用大模型，随时可用。
+          风险体检、模板简报、指标趋势等功能不依赖大模型，可直接使用。
         </div>
       )}
       {items.map(({ a, cached }, i) => (
@@ -413,7 +413,7 @@ function AskTab({ d }: { d: DiagnosisResult }) {
           </ol>
           <VerifiedMarkdown text={annotatedOf(a)} refs={a.refs} code={d.profile.code} local={a.evidence} />
           {a.ok === false
-            ? <div className="rounded bg-red-50 p-2 text-xs text-red-700">本次没有得到有效回答（模型调用失败或回答为空），不进行核验统计。</div>
+            ? <div className="rounded bg-red-50 p-2 text-xs text-red-700">模型调用失败或回答为空，本次没有可核验的内容。</div>
             : <VerificationBar v={a.verification} />}
           {a.warnings.map((w) => <div key={w} className="text-xs text-amber-700">{w}</div>)}
         </article>

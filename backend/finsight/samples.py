@@ -15,7 +15,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from finsight.agent.research_agent import AgentAnswer
+from finsight.agent.research_agent import AgentAnswer, answer_asof_note
 from finsight.analytics.diagnosis import DiagnosisResult
 from finsight.domain import Evidence
 from finsight.reporting.report import Report, data_asof
@@ -98,7 +98,7 @@ def build_ask_sample(raw: dict[str, Any], result: DiagnosisResult, *, source: st
         refs[ref] = Evidence.model_validate(stored)
     body, _ = _strip_note(raw["answer"])
     v = verify(body, refs)
-    note = _strip_note(raw["answer"])[1]
+    note = answer_asof_note(result, raw.get("steps", []))  # 时效行由系统生成，按当前快照重写
     warnings = list(raw.get("warnings", [])) + [f for f in v.consistency_flags if f not in raw.get("warnings", [])]
     ans = AgentAnswer(question=raw["question"], answer=body + note, annotated_answer=annotate(body, v) + note,
                       refs=dict(raw["refs"]), evidence={e.id: e for e in refs.values()}, verification=v,

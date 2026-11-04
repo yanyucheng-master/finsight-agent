@@ -74,8 +74,8 @@ function Home() {
   useEffect(() => { api.available().then(setList).catch((e) => setErr(String(e.message ?? e))); }, []);
   const PILLARS = [
     { t: "每个数字都有出处", d: "原始响应快照带 URL、抓取时间与 SHA-256，任意数字一键回溯到原始字段。" },
-    { t: "先核验数据，再做分析", d: "会计恒等式、跨期连续性、与数据源公布指标交叉比对，数据可信才进入分析。" },
-    { t: "AI 结论逐条核验", d: "大模型只能引用证据作答；核验器逐个比对数字，编造与不一致会被打回或标红。" },
+    { t: "先核验数据，再做分析", d: "会计恒等式、跨期连续性与数据源公布指标交叉比对，通过后再进入指标计算。" },
+    { t: "AI 结论逐条核验", d: "大模型按编号引用证据写作，核验器逐个比对文中数字，不一致的打回修订或标红。" },
   ];
   return (
     <div className="mx-auto max-w-6xl px-4 pb-16">
@@ -83,7 +83,7 @@ function Home() {
         <div className="text-sm opacity-80">AI+金融赋能 · 投研分析场景</div>
         <h1 className="mt-2 text-3xl font-semibold">可验证的上市公司投研智能体</h1>
         <p className="mt-3 max-w-2xl text-sm leading-relaxed opacity-90">
-          把“取数—核验—指标—风险排查—撰写—复核”的投研流程交给智能体自动完成，同时把每一个数字的证据链交还给研究员。
+          智能体完成取数、核验、指标计算、风险排查与简报撰写，研究员可以从任意数字追溯到原始字段和快照。
         </p>
         <div className="mt-6 grid gap-3 md:grid-cols-3">
           {PILLARS.map((p) => (
@@ -101,7 +101,7 @@ function Home() {
         {list?.map((c) => <CompanyCard key={c.code} c={c} />)}
       </div>
       <p className="mt-8 text-xs leading-relaxed text-slate-400">
-        数据来源：东方财富 F10 公开财务数据、巨潮资讯（证监会指定信息披露平台）。本系统输出为财务风险排查线索，不构成投资建议。
+        数据来源：东方财富 F10 公开财务数据、巨潮资讯（证监会指定信息披露平台）。分析结果供研究参考，不构成投资建议。
       </p>
     </div>
   );

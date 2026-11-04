@@ -16,9 +16,9 @@ const must = (cond, msg) => { if (!cond) throw new Error('断言失败：' + msg
   await page.waitForSelector('text=综合风险评级', { timeout: 30000 });
   await page.click('nav >> text=研究简报');
 
-  // 1) 有缓存样例时直接秒开，并如实说明这是重新核验过的缓存
+  // 1) 有缓存样例时直接打开，并标明核验结果由当前版本核验器重新计算
   await page.waitForSelector('text=缓存样例', { timeout: 5000 });
-  await page.waitForSelector('text=用当前版本核验器重新核验', { timeout: 5000 });
+  await page.waitForSelector('text=当前版本核验器', { timeout: 5000 });
   await page.waitForSelector('text=抽取到的数字均已按引用核验');
   await page.screenshot({ path: OUT + '/a1_cached_report.png', fullPage: true });
 

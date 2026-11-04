@@ -154,7 +154,7 @@ def template_report(result: DiagnosisResult, ctx: ReportContext) -> str:
     out += todo or ["- 跟踪下一期定期报告，确认各项指标趋势是否延续。"]
     out.append("\n## 数据与方法说明")
     out.append("本简报由 FinSight 确定性引擎生成：数据取自公开披露渠道的原始快照，指标与模型按公开公式计算，"
-               "每个数字均可通过引用编号溯源。模型结论为排查线索，不构成投资建议。")
+               "每个数字均可通过引用编号溯源。预警模型结果用于提示核查方向，本简报不构成投资建议。")
     return "\n".join(out)
 
 
@@ -220,7 +220,7 @@ def data_asof(result: DiagnosisResult) -> str:
         parts.append(f"该期财务数据公告日 {span(notices)}")
     if fetched:
         parts.append(f"快照采集于 {span(fetched)}")
-    return "，".join(parts) + "，不代表此后的最新状况"
+    return "，".join(parts)
 
 
 def _asof_note(result: DiagnosisResult) -> str:

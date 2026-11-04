@@ -112,7 +112,7 @@ function EvidenceBody({ detail }: { detail: EvidenceDetail }) {
       </section>
       {Object.keys(detail.snapshots).length > 0 && (
         <p className="text-xs leading-relaxed text-slate-400">
-          原始响应按内容寻址保存，读取时重新计算 SHA-256 与采集记录比对；哈希一致即证明数据未被改动。
+          原始响应按内容寻址保存，读取时重新计算 SHA-256 并与采集记录比对，哈希一致说明快照自采集后没有改动。
         </p>
       )}
     </>

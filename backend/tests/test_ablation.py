@@ -986,7 +986,7 @@ def test_a_group_with_no_figures_is_reported_not_counted_as_clean(diag, tmp_path
     summ = ablation.summarize([s])
     assert summ["a_no_figures"] == ["600519"]
     md = ablation.to_markdown(summ, None, {"model": "mock", "scoring_version": ablation.SCORING_VERSION})
-    assert "没有写出任何可核验数字的公司：600519" in md and "不应被理解为“零错误输出”" in md
+    assert "没有写出可核验数字的公司：600519" in md and "问题数字为 0 是因为没有作答" in md
 
 
 def test_period_split_separates_current_and_prior_period(diag):
@@ -1098,6 +1098,6 @@ def test_cli_labels_ai_assisted_review_without_claiming_human_independence(diag,
     assert cli_main(["eval", "ablation-score", str(out), "--audit", str(sheet), "--audit-kind", "ai-assisted"]) == 0
     output = capsys.readouterr().out
     assert "AI 辅助财报抽检（非盲审）" in output
-    assert "不是独立人工盲审" in output and "不构成独立真值" in output
+    assert "非盲审的 AI 辅助复核" in output and "参考标签" in output
     assert "## 人工抽检（独立口径）" not in output
     assert json.loads((out / "ablation.json").read_text("utf-8"))["meta"]["audit_kind"] == "ai-assisted"

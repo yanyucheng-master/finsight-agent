@@ -102,7 +102,7 @@ def _overall(signals: list[Signal], company_type: str) -> Overall:
         level, code = "低", "low"
     reasons = [f"{s.title}（{DIMENSION_LABELS.get(s.dimension, s.dimension)}）" for s in high + medium][:6]
     if company_type not in ("general",):
-        headline = "该公司为金融类企业，一般工商业指标体系仅部分适用，结论仅供参考。"
+        headline = "该公司为金融类企业，报表结构与一般工商业企业不同，部分指标不适用。"
     elif code == "high":
         headline = f"发现 {len(high)} 项高风险、{len(medium)} 项中风险信号，建议重点核查。"
     elif code == "medium":

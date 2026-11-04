@@ -318,7 +318,7 @@ def verify(text: str, refs: dict[str, Evidence]) -> VerificationResult:
                                     negative_words=neg_words, plus=plus)
             if hit_ev is None and is_benchmark:
                 claim.status = "benchmark"
-                claim.message = "比较基准（如“低于1倍”），不是来自证据的公司数据；如为系统阈值，应引用阈值证据"
+                claim.message = "比较基准（如“低于1倍”），属于判断标尺；若为系统阈值，可引用对应的阈值证据"
                 claims.append(claim)
                 continue
             if hit_ev is not None:

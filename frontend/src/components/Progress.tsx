@@ -40,7 +40,7 @@ export function JobProgress({ job }: { job: JobStatus }) {
         </ul>
       )}
       {job.live && job.stage === "drafting" && (
-        <div className="mt-2 text-[11px] text-slate-400">推理模型会先深度思考再作答，这一步通常最久；数字写完后会立刻进入核验。</div>
+        <div className="mt-2 text-[11px] text-slate-400">推理模型先思考再作答，这一步耗时最长；正文完成后立即进入核验。</div>
       )}
     </div>
   );
@@ -50,9 +50,8 @@ export function CachedBadge({ s }: { s: SampleMeta }) {
   const v = s.verification;
   return (
     <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">
-      <b>缓存样例</b>：由 {s.model ?? "大模型"} {s.generated_at ? `于 ${s.generated_at.replace("T", " ").replace("Z", " UTC")} ` : "（生成时间未记录）"}真实生成（耗时 {(s.elapsed_ms / 1000).toFixed(0)} 秒）。
-      内容未经改动；下面的核验结果是<b>用当前版本核验器重新核验</b>得到的（{v.total} 个数字，{v.mismatch + v.invalid_ref + v.unverified} 个有问题）。
-      想看现场生成过程，可使用“实时生成”。
+      <b>缓存样例</b>：{s.model ?? "大模型"} {s.generated_at ? `于 ${s.generated_at.replace("T", " ").replace("Z", " UTC")} ` : ""}生成，耗时 {(s.elapsed_ms / 1000).toFixed(0)} 秒。
+      正文保持原样，核验结果由<b>当前版本核验器</b>重新计算：{v.total} 个数字，{v.mismatch + v.invalid_ref + v.unverified} 个有问题。
     </div>
   );
 }

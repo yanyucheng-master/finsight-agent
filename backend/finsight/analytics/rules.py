@@ -420,7 +420,7 @@ def md01_beneish(r: RuleCtx) -> list[Signal]:
         return [Signal(rule="MD01", title="Beneish 模型提示盈余操纵特征", dimension="models", severity="high", period=e.period,
                        summary=f"{yr(e)} Beneish M-Score 为 {cite(e)}，高于判别阈值 {tp(r, 'beneish_threshold')}。{tail}",
                        evidence=ev_ids, threshold_type="literature", reference=ref,
-                       rationale="模型基于美国样本估计，在 A 股作为排查线索而非结论：应结合驱动分项回到报表附注核实。")]
+                       rationale="模型系数来自美国样本，用于 A 股时应结合驱动分项回到报表附注核实。")]
     return [Signal(rule="MD01", title="Beneish M-Score 接近警戒阈值", dimension="models", severity="low", period=e.period,
                    summary=f"{yr(e)} Beneish M-Score 为 {cite(e)}，介于 {tp(r, 'beneish_watch')} 与 {tp(r, 'beneish_threshold')} 之间。{tail}",
                    evidence=ev_ids, threshold_type="literature", reference=ref,

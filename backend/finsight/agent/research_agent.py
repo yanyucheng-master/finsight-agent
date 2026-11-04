@@ -96,6 +96,12 @@ class AgentAnswer(BaseModel):
     ok: bool = True
 
 
+def answer_asof_note(result: DiagnosisResult, steps: list[AgentStep] | list[dict[str, Any]]) -> str:
+    """回答末尾由系统追加的数据时效行；用到同业比较时说明同业数据的来源。"""
+    tools = {st.tool if isinstance(st, AgentStep) else st.get("tool") for st in steps}
+    return f"\n\n> 数据时效（系统生成）：{data_asof(result)}" + ("；同业数据取自各自公司的快照。" if "compare_peers" in tools else "。")
+
+
 class _Session:
     """一次问答会话的证据注册表：证据 ID ↔ 短编号。"""
 
@@ -333,8 +339,7 @@ class ResearchAgent:
             v = verify("", refs)
             attempts = 0
             warnings.append(str(exc))
-        note = f"\n\n> 数据时效（系统生成）：{data_asof(self.r)}" + ("；同业数据取自各自公司的快照。" if any(
-            st.tool == "compare_peers" for st in steps) else "。") if answer and attempts else ""
+        note = answer_asof_note(self.r, steps) if answer and attempts else ""
         return AgentAnswer(question=question, answer=answer + note, annotated_answer=annotate(answer, v) + note,
                            refs={r: e.id for r, e in refs.items()}, evidence={e.id: e for e in refs.values()},
                            verification=v, steps=steps, attempts=attempts, model=getattr(self.llm, "model", None),

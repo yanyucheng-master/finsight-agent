@@ -61,7 +61,7 @@ export function VerificationBar({ v }: { v: Verification }) {
         {v.mismatch > 0 && <span className="text-red-700">不一致 <b>{v.mismatch}</b></span>}
         {v.unverified > 0 && <span className="text-red-700">无证据 <b>{v.unverified}</b></span>}
         {v.invalid_ref > 0 && <span className="text-red-700">引用无效 <b>{v.invalid_ref}</b></span>}
-        {bench > 0 && <span className="text-slate-600" title="如“低于1倍”中的 1：比较基准，不是公司数据，未核验来源">比较基准 <b>{bench}</b></span>}
+        {bench > 0 && <span className="text-slate-600" title="如“低于1倍”中的 1，属于判断标尺，不计入数字断言">比较基准 <b>{bench}</b></span>}
         <span className="text-slate-600">可核验率 <b>{(v.verifiable_rate * 100).toFixed(1)}%</b></span>
         {v.total > 0 && (
           <button className="ml-auto text-xs text-brand-700 hover:underline" onClick={() => setOpen(!open)}>
@@ -71,7 +71,7 @@ export function VerificationBar({ v }: { v: Verification }) {
       </div>
       {v.compliance_flags.map((f) => <div key={f} className="mt-1 text-xs text-red-700">合规提示：{f}</div>)}
       {consistency.map((f) => <div key={f} className="mt-1 text-xs text-amber-700">{f}</div>)}
-      <div className="mt-1 text-[11px] text-slate-500">核验只针对抽取到的数字与证据是否一致，不代表全文的推理、口径和时效都正确。</div>
+      <div className="mt-1 text-[11px] text-slate-500">核验范围：文中抽取到的数字与所引证据的一致性。</div>
       {open && (
         <table className="mt-3 w-full text-xs">
           <thead className="text-left text-slate-500">

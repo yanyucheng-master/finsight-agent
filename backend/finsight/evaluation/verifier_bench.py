@@ -230,8 +230,8 @@ def to_markdown(s: dict) -> str:
         lines.append(f"| {LABELS[k]} | {a['passed']}/{a['cases']}（{a['rate']:.2%}） | "
                      f"{b['passed']}/{b['cases']}（{b['rate']:.2%}） |")
     lines += ["", f"误报率（原文被判错的比例）：{s['false_positive_rate']:.2%}", "",
-              "局限：这是受控注入评测，文本来自模板；真实模型输出的排版与措辞更多样，"
-              "回归用例见 `tests/test_verifier_regressions.py`（取自 2026-10-30 真实测试）。", ""]
+              "说明：注入用的文本来自模板简报。真实模型输出的排版和措辞更多样，"
+              "对应的回归用例见 `tests/test_verifier_regressions.py`（取自 2026-10-30 真实测试）。", ""]
     for name in ("spaced", "compact"):
         misses = {k: v["misses"] for k, v in lay[name]["detection"].items() if v["misses"]}
         fails = {k: v["failures"] for k, v in lay[name]["controls"].items() if v["failures"]}

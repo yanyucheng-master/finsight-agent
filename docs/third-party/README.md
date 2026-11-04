@@ -1,6 +1,6 @@
 # 第三方依赖与许可资料
 
-来自 frontend/package-lock.json 的非 dev 依赖及本机后端运行依赖元数据。npm 许可文本从锁定版本 tarball 读取并校验 lockfile SHA-512；Python 许可文本来自已安装 dist-info。此清单用于归属和复查，不代表已完成法律授权审查。前端含类型和传递依赖，不表示每项都进入最终 JS。后端版本为本机参考环境，Render 实际安装版本可能不同。
+清单覆盖 frontend/package-lock.json 中的非 dev 依赖和后端运行依赖。npm 许可文本取自锁定版本的 tarball，并按 lockfile 中的 SHA-512 校验；Python 许可文本取自已安装包的 dist-info。清单用于署名与复查。前端部分包含类型声明和传递依赖，其中一部分不会打进最终 JS。后端版本号取自本机参考环境，Render 上实际安装的版本可能略有差异。
 
 |生态|名称|参考版本|许可声明|许可文件数|
 |---|---|---|---|---|
