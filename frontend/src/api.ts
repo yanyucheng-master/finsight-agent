@@ -1,5 +1,12 @@
 import type { AgentAnswer, CompanyBrief, DemoStatus, DiagnosisResult, EvidenceDetail, JobStatus, Report, SampleFull, SampleMeta } from "./types";
 
+export const BALANCE_ERROR_MESSAGE = "调用失败，费用已达上限，请充值余额";
+
+export function callErrorMessage(message: string): string {
+  return /费用保护|LLM_BUDGET_CNY|费用已达上限|余额不足|insufficient[_ -]*(?:balance|user[_ -]*quota|quota)|(?:balance|credit)[_ -]*(?:is[_ -]*)?(?:insufficient|exhausted)|HTTP\s*402\b/i.test(message)
+    ? BALANCE_ERROR_MESSAGE : message;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, { headers: { "Content-Type": "application/json" }, ...init });
   if (!res.ok) {
@@ -10,7 +17,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     } catch {
       /* 非 JSON 错误体 */
     }
-    throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+    throw new Error(callErrorMessage(typeof detail === "string" ? detail : JSON.stringify(detail)));
   }
   return res.json() as Promise<T>;
 }
@@ -56,6 +63,6 @@ export async function waitJob<T>(start: JobStatus, onUpdate: (j: JobStatus) => v
     job = await api.job(job.id);
     onUpdate(job);
   }
-  if (job.status === "failed") throw new Error(job.error ?? "生成失败");
+  if (job.status === "failed") throw new Error(callErrorMessage(job.error ?? "生成失败"));
   return job.result as T;
 }

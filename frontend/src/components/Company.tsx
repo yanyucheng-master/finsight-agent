@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, waitJob } from "../api";
+import { api, BALANCE_ERROR_MESSAGE, callErrorMessage, waitJob } from "../api";
 import { fmtValue, LEVEL_STYLE, sevOf, THRESHOLD_TYPE, year } from "../format";
 import { burst, CountUp, pulseAt, useToast } from "../fx";
 import type { AgentAnswer, DemoStatus, DiagnosisResult, DimensionSummary, JobStatus, MetricRow, Report, SampleMeta, Signal } from "../types";
@@ -421,7 +421,7 @@ function BriefTab({ d }: { d: DiagnosisResult }) {
             <span className="chip border border-line bg-white/80"><Icon name="clock" className="h-3.5 w-3.5 text-brand-500" />耗时 {(rep.elapsed_ms / 1000).toFixed(1)} 秒</span>
             {rep.usage.prompt_tokens != null && <span className="chip border border-line bg-white/80">Token：{rep.usage.prompt_tokens} 输入 / {rep.usage.completion_tokens} 输出</span>}
           </div>
-          {rep.warnings.map((w) => <div key={w} className="rounded-xl bg-[#fff6ea] p-2.5 text-xs text-[#9a5a0c]">{w}</div>)}
+          {[...new Set(rep.warnings.map(callErrorMessage))].map((w) => <div key={w} className="rounded-xl bg-[#fff6ea] p-2.5 text-xs text-[#9a5a0c]">{w}</div>)}
           <article className="glass glass-strong rise rounded-[24px] p-6 sm:p-8" style={{ ["--i" as string]: 3 }}>
             <VerifiedMarkdown text={annotatedOf(rep)} refs={rep.refs} code={d.profile.code} />
           </article>
@@ -433,7 +433,8 @@ function BriefTab({ d }: { d: DiagnosisResult }) {
 
 function annotatedOf(rep: Report | AgentAnswer): string {
   const a = (rep as Report & { annotated_markdown?: string; annotated_answer?: string });
-  return a.annotated_markdown ?? a.annotated_answer ?? (rep as Report).markdown;
+  const text = a.annotated_markdown ?? a.annotated_answer ?? (rep as Report).markdown;
+  return "question" in rep && rep.ok === false ? callErrorMessage(text) : text;
 }
 
 // ---------------------------------------------------------------- 智能问答
@@ -579,9 +580,9 @@ function AskTab({ d }: { d: DiagnosisResult }) {
             <div className="min-w-0 flex-1"><VerifiedMarkdown text={annotatedOf(a)} refs={a.refs} code={d.profile.code} local={a.evidence} /></div>
           </div>
           {a.ok === false
-            ? <div className="shake rounded-xl bg-red-50 p-2.5 text-xs text-red-700">模型调用失败或回答为空，本次没有可核验的内容。</div>
+            ? annotatedOf(a) !== BALANCE_ERROR_MESSAGE && <div className="shake rounded-xl bg-red-50 p-2.5 text-xs text-red-700">模型调用失败或回答为空，本次没有可核验的内容。</div>
             : <VerificationBar v={a.verification} celebrate={cached ? 0 : key} />}
-          {a.warnings.map((w) => <div key={w} className="text-xs text-[#9a5a0c]">{w}</div>)}
+          {[...new Set(a.warnings.map(callErrorMessage))].filter((w) => w !== annotatedOf(a)).map((w) => <div key={w} className="text-xs text-[#9a5a0c]">{w}</div>)}
         </article>
       ))}
     </div>
